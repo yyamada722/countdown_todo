@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Todo カウントダウン</title>
+    
+    <!-- モバイルアプリ用のメタタグ -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="TodoCD">
+    <link rel="apple-touch-icon" href="/icon-192.png">
+    
+    <!-- PWAマニフェスト -->
+    <link rel="manifest" href="/manifest.json">
+    
+    <!-- Nosutaru-dotMPlusH font is loaded locally via @font-face in CSS -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- 通知設定ボタン -->
+    <button class="notification-settings-btn" id="notificationSettings" title="通知設定">
+        通知
+    </button>
+    
+    <div class="container">
+        <!-- 時刻表示 -->
+        <div class="clock-container">
+            <div class="clock-time" id="currentTime">00:00:00</div>
+            <div class="clock-date" id="currentDate">0000/00/00 (月)</div>
+        </div>
+
+        <!-- フィルタータブ -->
+        <div class="filter-tabs">
+            <button class="filter-tab active" data-filter="active">アクティブ</button>
+            <button class="filter-tab" data-filter="today">今日</button>
+            <button class="filter-tab" data-filter="tomorrow">明日</button>
+            <button class="filter-tab" data-filter="completed">完了済み</button>
+            <button class="filter-tab" data-filter="stats">統計</button>
+            <button class="filter-tab" data-filter="weekly">週間</button>
+        </div>
+
+        <!-- Todoリスト -->
+        <div class="todo-container" id="todoContainer"></div>
+
+        <!-- 統計表示 -->
+        <div class="stats-container" id="statsContainer" style="display: none;"></div>
+
+        <!-- 週間ビュー -->
+        <div class="weekly-view-container" id="weeklyViewContainer" style="display: none;"></div>
+
+        <!-- フッター -->
+        <div class="footer">
+            <div class="status-indicators">
+                <span class="status-item">
+                    <div class="status-dot bg-blue"></div>
+                    SCHEDULED
+                </span>
+                <span class="status-item">
+                    <div class="status-dot bg-green"></div>
+                    ON TIME
+                </span>
+                <span class="status-item">
+                    <div class="status-dot bg-orange"></div>
+                    SOON
+                </span>
+                <span class="status-item">
+                    <div class="status-dot bg-red"></div>
+                    URGENT
+                </span>
+                <span class="status-item">
+                    <div class="status-dot bg-red-dark"></div>
+                    OVERDUE
+                </span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 浮動アクションボタン -->
+    <button class="fab" id="openModal">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+    </button>
+    
+    <!-- モーダル -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>新しいタスクを作成</h2>
+                <button class="modal-close" id="closeModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-field">
+                    <label for="modalTodoTitle">タスク名</label>
+                    <input type="text" id="modalTodoTitle" placeholder="タスク名を入力" class="modal-input">
+                </div>
+                <!-- タスクタイプ選択 -->
+                <div class="form-field">
+                    <label>タスクタイプ</label>
+                    <div class="task-type-selector">
+                        <button type="button" class="task-type-btn active" id="taskTypeNormal">通常のタスク</button>
+                        <button type="button" class="task-type-btn" id="taskTypeStartNow">今から始める</button>
+                    </div>
+                </div>
+                
+                <!-- 通常の期限設定 -->
+                <div class="form-field" id="normalDeadlineField">
+                    <label>期限</label>
+                    <div class="datetime-picker">
+                        <div class="calendar-container">
+                            <div class="calendar-header">
+                                <button class="calendar-nav" id="prevMonth">&lt;</button>
+                                <div class="calendar-month-year" id="currentMonthYear"></div>
+                                <button class="calendar-nav" id="nextMonth">&gt;</button>
+                            </div>
+                            <div class="calendar-grid" id="calendarGrid"></div>
+                        </div>
+                        <div class="time-picker">
+                            <input type="time" id="modalTodoTime" class="time-input" value="12:00">
+                        </div>
+                    </div>
+                    <div class="datetime-buttons">
+                        <button type="button" class="btn-now" id="setNowDateTime">現在の日時</button>
+                        <button type="button" class="btn-today-deadline" id="setToday20">今日20時</button>
+                        <button type="button" class="time-add-btn" data-minutes="60">+1h</button>
+                        <button type="button" class="time-add-btn" data-minutes="5">+5min</button>
+                    </div>
+                    <input type="hidden" id="modalTodoDeadline">
+                </div>
+                
+                <!-- 今から始めるタスクの時間設定 -->
+                <div class="form-field" id="startNowDeadlineField" style="display: none;">
+                    <label>作業時間</label>
+                    <div class="duration-selector">
+                        <button type="button" class="duration-btn" data-minutes="5">5分</button>
+                        <button type="button" class="duration-btn" data-minutes="10">10分</button>
+                        <button type="button" class="duration-btn" data-minutes="30">30分</button>
+                        <button type="button" class="duration-btn" data-minutes="60">1時間</button>
+                        <button type="button" class="duration-btn" data-minutes="120">2時間</button>
+                        <button type="button" class="duration-btn" data-minutes="180">3時間</button>
+                    </div>
+                    <div class="custom-duration">
+                        <input type="number" id="customDuration" min="1" max="1440" placeholder="分">
+                        <span>分</span>
+                    </div>
+                </div>
+                <div class="form-field">
+                    <label for="modalTodoRepeat">繰り返し（任意）</label>
+                    <select id="modalTodoRepeat" class="modal-select">
+                        <option value="">なし</option>
+                        <option value="daily">毎日</option>
+                        <option value="weekly">毎週</option>
+                        <option value="biweekly">隔週</option>
+                        <option value="monthly">毎月</option>
+                        <option value="weekdays">平日のみ</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label for="modalTodoNotify">事前通知（任意）</label>
+                    <select id="modalTodoNotify" class="modal-select">
+                        <option value="">なし</option>
+                        <option value="10">10分前</option>
+                        <option value="30">30分前</option>
+                        <option value="60">1時間前</option>
+                        <option value="180">3時間前</option>
+                        <option value="1440">1日前</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label for="modalTodoMemo">メモ（任意）</label>
+                    <textarea id="modalTodoMemo" placeholder="メモを入力..." class="modal-textarea" rows="3"></textarea>
+                </div>
+                <!-- 複数タスク入力エリア（PCのみ） -->
+                <div class="form-field desktop-only" id="multiTaskField" style="display: none;">
+                    <label for="multiTaskInput">複数タスクを一括登録（1行に1タスク）</label>
+                    <textarea id="multiTaskInput" placeholder="タスク1&#10;タスク2&#10;タスク3..." class="modal-textarea" rows="5"></textarea>
+                    <small class="help-text">複数のタスクを入力すると、同じ期限・設定で一括登録されます</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-cancel" id="cancelModal">キャンセル</button>
+                <button class="btn-create" id="createTodo">作成</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 編集モーダル -->
+    <div class="modal-overlay" id="editModalOverlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>タスクを編集</h2>
+                <button class="modal-close" id="closeEditModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-field">
+                    <label for="editTodoTitle">タスク名</label>
+                    <input type="text" id="editTodoTitle" placeholder="タスク名を入力" class="modal-input">
+                </div>
+                <div class="form-field">
+                    <label for="editTodoDeadline">期限</label>
+                    <input type="datetime-local" id="editTodoDeadline" class="modal-input">
+                </div>
+                <div class="time-adjust-buttons">
+                    <button class="time-btn" data-adjust="-60">-1h</button>
+                    <button class="time-btn" data-adjust="-30">-30m</button>
+                    <button class="time-btn" data-adjust="-10">-10m</button>
+                    <button class="time-btn" data-adjust="10">+10m</button>
+                    <button class="time-btn" data-adjust="30">+30m</button>
+                    <button class="time-btn" data-adjust="60">+1h</button>
+                </div>
+                <div class="form-field">
+                    <label for="editTodoRepeat">繰り返し（任意）</label>
+                    <select id="editTodoRepeat" class="modal-select">
+                        <option value="">なし</option>
+                        <option value="daily">毎日</option>
+                        <option value="weekly">毎週</option>
+                        <option value="biweekly">隔週</option>
+                        <option value="monthly">毎月</option>
+                        <option value="weekdays">平日のみ</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label for="editTodoNotify">事前通知（任意）</label>
+                    <select id="editTodoNotify" class="modal-select">
+                        <option value="">なし</option>
+                        <option value="10">10分前</option>
+                        <option value="30">30分前</option>
+                        <option value="60">1時間前</option>
+                        <option value="180">3時間前</option>
+                        <option value="1440">1日前</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label for="editTodoMemo">メモ（任意）</label>
+                    <div id="editMemoPreview" class="memo-preview"></div>
+                    <textarea id="editTodoMemo" placeholder="メモを入力..." class="modal-textarea" rows="3"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-trash" id="deleteEditTodo" title="削除">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                </button>
+                <button class="btn-done" id="doneTodo">完了</button>
+                <button class="btn-create" id="updateTodo">更新</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 通知ポップアップ -->
+    <div class="notification-container" id="notificationContainer"></div>
+    
+    <script src="script.js"></script>
+</body>
+</html>
