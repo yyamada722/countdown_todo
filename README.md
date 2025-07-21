@@ -123,3 +123,16 @@ sudo ufw allow 8080/tcp
 ## License
 
 MIT License
+
+## Font License / フォントライセンス
+
+This application uses "Nosutaru-dotMPlusH-10-Regular" font.
+このアプリケーションでは「ノスタルドット（M+H）」フォントを使用しています。
+
+- Font Name / フォント名: ノスタルドット（M+H）
+- Designer / デザイナー: 永山嘉昭（フロップデザイン）
+- License Page / ライセンスページ: https://logotype.jp/nosutaru-dot.html
+- License / ライセンス: M+ FONT LICENSE
+
+The font is redistributable under the M+ FONT LICENSE.
+このフォントはM+ FONT LICENSEに基づいて再配布可能です。
