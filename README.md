@@ -1,5 +1,7 @@
 # Countdown Todo
 
+<img width="1056" height="470" alt="image" src="https://github.com/user-attachments/assets/92449456-08b2-437e-b5a4-25246b04c7e6" />
+
 A task management application with countdown timers for each task.
 
 タスクごとにカウントダウンタイマーを設定できるTodoアプリケーションです。
