@@ -573,6 +573,16 @@ function openEditModal(id) {
     // メモプレビューを更新
     updateMemoPreview();
     
+    // タブの初期化
+    setupTabs();
+    
+    // メモがある場合はメモタブを選択
+    if (todo.memo) {
+        switchToTab('memo');
+    } else {
+        switchToTab('edit');
+    }
+    
     // 日時を入力フィールドの形式に変換
     const deadline = new Date(todo.deadline);
     deadline.setMinutes(deadline.getMinutes() - deadline.getTimezoneOffset());
@@ -1553,9 +1563,36 @@ function updateMemoPreview() {
     
     if (memoText) {
         preview.innerHTML = parseMemoMarkdown(memoText);
-        preview.style.display = 'block';
     } else {
-        preview.style.display = 'none';
+        preview.innerHTML = '<p style="color: #666; text-align: center;">メモがありません</p>';
+    }
+}
+
+// タブの初期化
+function setupTabs() {
+    const tabButtons = document.querySelectorAll('.tab-button');
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const tabName = button.getAttribute('data-tab');
+            switchToTab(tabName);
+        });
+    });
+}
+
+// タブ切り替え
+function switchToTab(tabName) {
+    // タブボタンの切り替え
+    document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-tab') === tabName);
+    });
+    
+    // タブコンテンツの切り替え
+    document.getElementById('editTab').classList.toggle('active', tabName === 'edit');
+    document.getElementById('memoTab').classList.toggle('active', tabName === 'memo');
+    
+    // メモタブが選択された時はプレビューを更新
+    if (tabName === 'memo') {
+        updateMemoPreview();
     }
 }
 

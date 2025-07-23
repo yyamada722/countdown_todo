@@ -233,10 +233,25 @@
                         <option value="1440">1日前</option>
                     </select>
                 </div>
-                <div class="form-field">
-                    <label for="editTodoMemo">メモ（任意）</label>
-                    <div id="editMemoPreview" class="memo-preview"></div>
-                    <textarea id="editTodoMemo" placeholder="メモを入力..." class="modal-textarea" rows="3"></textarea>
+                <!-- タブ切り替え -->
+                <div class="tab-container">
+                    <div class="tab-buttons">
+                        <button class="tab-button active" data-tab="edit">編集</button>
+                        <button class="tab-button" data-tab="memo">メモ</button>
+                    </div>
+                    
+                    <!-- 編集タブ -->
+                    <div class="tab-content active" id="editTab">
+                        <div class="form-field">
+                            <label for="editTodoMemo">メモ（任意）</label>
+                            <textarea id="editTodoMemo" placeholder="メモを入力..." class="modal-textarea" rows="3"></textarea>
+                        </div>
+                    </div>
+                    
+                    <!-- メモタブ -->
+                    <div class="tab-content" id="memoTab">
+                        <div id="editMemoPreview" class="memo-preview"></div>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">

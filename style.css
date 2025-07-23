@@ -957,7 +957,48 @@ input[type="datetime-local"] {
     font-size: 0.875rem;
     color: #cccccc;
     line-height: 1.6;
+    min-height: 100px;
+}
+
+/* タブコンテナ */
+.tab-container {
+    margin-top: 20px;
+}
+
+.tab-buttons {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.tab-button {
+    flex: 1;
+    padding: 8px 16px;
+    background-color: #222;
+    border: 2px solid #444;
+    color: #888;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 14px;
+}
+
+.tab-button:hover {
+    background-color: #333;
+    color: #ccc;
+}
+
+.tab-button.active {
+    background-color: #333;
+    border-color: #fde047;
+    color: #fde047;
+}
+
+.tab-content {
     display: none;
+}
+
+.tab-content.active {
+    display: block;
 }
 
 /* メモ内のリンク */
