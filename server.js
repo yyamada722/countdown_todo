@@ -44,6 +44,8 @@ function initDatabase() {
                 lastCompletionDate: null,
                 rank: "見習い"
             },
+            presets: [],
+            schedules: [],
             lastUpdated: new Date().toISOString()
         };
         fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2));
@@ -54,10 +56,22 @@ function initDatabase() {
 function readDatabase() {
     try {
         const data = fs.readFileSync(DB_FILE, 'utf8');
-        return JSON.parse(data);
+        const parsedData = JSON.parse(data);
+        
+        // presetsフィールドがない場合は追加
+        if (!parsedData.presets) {
+            parsedData.presets = [];
+        }
+        
+        // schedulesフィールドがない場合は追加
+        if (!parsedData.schedules) {
+            parsedData.schedules = [];
+        }
+        
+        return parsedData;
     } catch (error) {
         console.error('Database read error:', error);
-        return { todos: [], lastUpdated: new Date().toISOString() };
+        return { todos: [], presets: [], schedules: [], lastUpdated: new Date().toISOString() };
     }
 }
 
@@ -308,6 +322,343 @@ async function handleAPI(req, res, pathname) {
         return;
     }
     
+    // GET /api/presets - プリセット一覧を取得
+    if (method === 'GET' && pathname === '/api/presets') {
+        const data = readDatabase();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data.presets || []));
+        return;
+    }
+    
+    // POST /api/presets - 新しいプリセットを作成
+    if (method === 'POST' && pathname === '/api/presets') {
+        try {
+            const preset = await parseRequestBody(req);
+            const data = readDatabase();
+            
+            // プリセットIDを生成
+            const newPreset = {
+                id: Date.now(),
+                name: preset.name,
+                tasks: preset.tasks || [],
+                createdAt: new Date().toISOString(),
+                lastUsed: null
+            };
+            
+            data.presets.push(newPreset);
+            
+            if (writeDatabase(data)) {
+                res.writeHead(201, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(newPreset));
+            } else {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Failed to create preset' }));
+            }
+        } catch (error) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid request body' }));
+        }
+        return;
+    }
+    
+    // PUT /api/presets/:id - プリセットを更新
+    if (method === 'PUT' && pathname.startsWith('/api/presets/')) {
+        const presetId = parseInt(pathname.split('/')[3]);
+        
+        try {
+            const updates = await parseRequestBody(req);
+            const data = readDatabase();
+            
+            const index = data.presets.findIndex(preset => preset.id === presetId);
+            if (index !== -1) {
+                data.presets[index] = {
+                    ...data.presets[index],
+                    name: updates.name || data.presets[index].name,
+                    tasks: updates.tasks || data.presets[index].tasks
+                };
+                
+                if (writeDatabase(data)) {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify(data.presets[index]));
+                } else {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Failed to update preset' }));
+                }
+            } else {
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Preset not found' }));
+            }
+        } catch (error) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid request body' }));
+        }
+        return;
+    }
+    
+    // DELETE /api/presets/:id - プリセットを削除
+    if (method === 'DELETE' && pathname.startsWith('/api/presets/')) {
+        const presetId = parseInt(pathname.split('/')[3]);
+        const data = readDatabase();
+        
+        const index = data.presets.findIndex(preset => preset.id === presetId);
+        if (index !== -1) {
+            data.presets.splice(index, 1);
+            
+            if (writeDatabase(data)) {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true }));
+            } else {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Failed to delete preset' }));
+            }
+        } else {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Preset not found' }));
+        }
+        return;
+    }
+    
+    // POST /api/presets/:id/apply - プリセットを今日に適用
+    if (method === 'POST' && pathname.match(/^\/api\/presets\/\d+\/apply$/)) {
+        const presetId = parseInt(pathname.split('/')[3]);
+        
+        try {
+            // リクエストボディを取得
+            let targetDate = 'today';
+            try {
+                const body = await parseRequestBody(req);
+                if (body.targetDate) {
+                    targetDate = body.targetDate;
+                }
+            } catch (e) {
+                // ボディがない場合はデフォルトで今日
+            }
+            
+            const data = readDatabase();
+            const preset = data.presets.find(p => p.id === presetId);
+            
+            if (!preset) {
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Preset not found' }));
+                return;
+            }
+            
+            // 対象日を決定
+            const baseDate = new Date();
+            if (targetDate === 'tomorrow') {
+                baseDate.setDate(baseDate.getDate() + 1);
+            }
+            const createdTodos = [];
+            
+            // プリセットのタスクをtodoとして作成
+            for (const task of preset.tasks) {
+                const [hours, minutes] = task.time.split(':').map(Number);
+                const deadline = new Date(baseDate);
+                deadline.setHours(hours, minutes, 0, 0);
+                
+                // 今日の場合で既に過ぎた時間の場合は明日に設定
+                if (targetDate === 'today' && deadline < new Date()) {
+                    deadline.setDate(deadline.getDate() + 1);
+                }
+                
+                const newTodo = {
+                    id: Date.now() + Math.random(),
+                    title: task.title,
+                    deadline: deadline.toISOString(),
+                    createdAt: new Date().toISOString(),
+                    archived: false,
+                    isRoutine: true,
+                    presetId: presetId
+                };
+                
+                data.todos.push(newTodo);
+                createdTodos.push(newTodo);
+            }
+            
+            // プリセットの最終使用日を更新
+            preset.lastUsed = new Date().toISOString();
+            
+            if (writeDatabase(data)) {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, createdTodos }));
+            } else {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Failed to apply preset' }));
+            }
+        } catch (error) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Failed to apply preset' }));
+        }
+        return;
+    }
+    
+    // GET /api/schedules - スケジュール一覧を取得
+    if (method === 'GET' && pathname === '/api/schedules') {
+        const data = readDatabase();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data.schedules || []));
+        return;
+    }
+    
+    // POST /api/schedules - 新しいスケジュールを作成
+    if (method === 'POST' && pathname === '/api/schedules') {
+        try {
+            const schedule = await parseRequestBody(req);
+            const data = readDatabase();
+            
+            // スケジュールIDを生成
+            const newSchedule = {
+                id: Date.now(),
+                title: schedule.title,
+                time: schedule.time,
+                repeat: schedule.repeat,
+                memo: schedule.memo || '',
+                createdAt: new Date().toISOString()
+            };
+            
+            data.schedules.push(newSchedule);
+            
+            if (writeDatabase(data)) {
+                res.writeHead(201, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(newSchedule));
+            } else {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Failed to save schedule' }));
+            }
+        } catch (error) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid request' }));
+        }
+        return;
+    }
+    
+    // PUT /api/schedules/:id - スケジュールを更新
+    if (method === 'PUT' && pathname.match(/^\/api\/schedules\/\d+$/)) {
+        const scheduleId = parseInt(pathname.split('/')[3]);
+        
+        try {
+            const updates = await parseRequestBody(req);
+            const data = readDatabase();
+            
+            const index = data.schedules.findIndex(schedule => schedule.id === scheduleId);
+            if (index !== -1) {
+                data.schedules[index] = {
+                    ...data.schedules[index],
+                    ...updates,
+                    id: scheduleId,
+                    updatedAt: new Date().toISOString()
+                };
+                
+                if (writeDatabase(data)) {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify(data.schedules[index]));
+                } else {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Failed to update schedule' }));
+                }
+            } else {
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Schedule not found' }));
+            }
+        } catch (error) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid request' }));
+        }
+        return;
+    }
+    
+    // DELETE /api/schedules/:id - スケジュールを削除
+    if (method === 'DELETE' && pathname.match(/^\/api\/schedules\/\d+$/)) {
+        const scheduleId = parseInt(pathname.split('/')[3]);
+        const data = readDatabase();
+        
+        const index = data.schedules.findIndex(schedule => schedule.id === scheduleId);
+        if (index !== -1) {
+            data.schedules.splice(index, 1);
+            
+            if (writeDatabase(data)) {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true }));
+            } else {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Failed to delete schedule' }));
+            }
+        } else {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Schedule not found' }));
+        }
+        return;
+    }
+    
+    // POST /api/schedules/batch-create - スケジュールから一括でタスクを作成
+    if (method === 'POST' && pathname === '/api/schedules/batch-create') {
+        try {
+            const request = await parseRequestBody(req);
+            const { scheduleIds, targetDate } = request;
+            const data = readDatabase();
+            
+            // 対象日を決定
+            const now = new Date();
+            let targetDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            if (targetDate === 'tomorrow') {
+                targetDay.setDate(targetDay.getDate() + 1);
+            }
+            
+            // 曜日を取得（日曜=0, 月曜=1, ...）
+            const dayOfWeek = targetDay.getDay();
+            const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
+            
+            let createdCount = 0;
+            const createdTodos = [];
+            
+            for (const scheduleId of scheduleIds) {
+                const schedule = data.schedules.find(s => s.id === scheduleId);
+                if (!schedule) continue;
+                
+                // 繰り返し条件をチェック
+                if (schedule.repeat === 'weekdays' && !isWeekday) {
+                    continue; // 平日のみの場合、週末はスキップ
+                }
+                
+                // タスクの期限を計算
+                const [hours, minutes] = schedule.time.split(':').map(Number);
+                const deadline = new Date(targetDay);
+                deadline.setHours(hours, minutes, 0, 0);
+                
+                // 新しいタスクを作成
+                const newTodo = {
+                    id: Date.now() + Math.random(),
+                    title: schedule.title,
+                    deadline: deadline.toISOString(),
+                    repeat: '',
+                    notifyBefore: null,
+                    memo: schedule.memo || '',
+                    completed: false,
+                    archived: false,
+                    order: data.todos.length,
+                    createdAt: new Date().toISOString(),
+                    startType: 'normal',
+                    scheduleId: schedule.id
+                };
+                
+                data.todos.push(newTodo);
+                createdTodos.push(newTodo);
+                createdCount++;
+            }
+            
+            if (writeDatabase(data)) {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ createdCount, createdTodos }));
+            } else {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Failed to create tasks' }));
+            }
+        } catch (error) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid request' }));
+        }
+        return;
+    }
     
     // 404 Not Found
     res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -454,6 +805,7 @@ function checkAndAwardBadges(userStats, taskData) {
 const server = http.createServer(async (req, res) => {
     const parsedUrl = url.parse(req.url);
     const pathname = parsedUrl.pathname;
+    const method = req.method;
     
     console.log(`${new Date().toISOString()} - ${req.method} ${pathname}`);
     
