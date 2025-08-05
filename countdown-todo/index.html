@@ -39,7 +39,6 @@
             <button class="filter-tab" data-filter="completed">完了済み</button>
             <button class="filter-tab" data-filter="stats">統計</button>
             <button class="filter-tab" data-filter="weekly">週間</button>
-            <button class="filter-tab" data-filter="schedule">スケジュール</button>
         </div>
 
         <!-- Todoリスト -->
@@ -50,9 +49,6 @@
 
         <!-- 週間ビュー -->
         <div class="weekly-view-container" id="weeklyViewContainer" style="display: none;"></div>
-
-        <!-- スケジュールビュー -->
-        <div class="schedule-container" id="scheduleContainer" style="display: none;"></div>
 
         <!-- フッター -->
         <div class="footer">
@@ -123,7 +119,6 @@
                             <div class="calendar-grid" id="calendarGrid"></div>
                         </div>
                         <div class="time-picker">
-                            <label for="modalTodoTime" class="visually-hidden">時刻</label>
                             <input type="time" id="modalTodoTime" class="time-input" value="12:00">
                         </div>
                     </div>
@@ -148,7 +143,6 @@
                         <button type="button" class="duration-btn" data-minutes="180">3時間</button>
                     </div>
                     <div class="custom-duration">
-                        <label for="customDuration" class="visually-hidden">カスタム時間</label>
                         <input type="number" id="customDuration" min="1" max="1440" placeholder="分">
                         <span>分</span>
                     </div>
@@ -239,28 +233,10 @@
                         <option value="1440">1日前</option>
                     </select>
                 </div>
-                <!-- タブ切り替え -->
-                <div class="tab-container">
-                    <div class="tab-buttons">
-                        <button class="tab-button active" data-tab="edit">編集</button>
-                        <button class="tab-button" data-tab="memo">メモ</button>
-                    </div>
-                    
-                    <!-- 編集タブ -->
-                    <div class="tab-content active" id="editTab">
-                        <div class="form-field">
-                            <label for="editTodoMemo">メモ（任意）</label>
-                            <textarea id="editTodoMemo" placeholder="メモを入力..." class="modal-textarea" rows="3"></textarea>
-                        </div>
-                    </div>
-                    
-                    <!-- メモタブ -->
-                    <div class="tab-content" id="memoTab">
-                        <div id="editMemoPreview" class="memo-preview"></div>
-                        <div class="memo-edit-hint">
-                            <small style="color: #666;">メモを編集するには「編集」タブをタップしてください</small>
-                        </div>
-                    </div>
+                <div class="form-field">
+                    <label for="editTodoMemo">メモ（任意）</label>
+                    <div id="editMemoPreview" class="memo-preview"></div>
+                    <textarea id="editTodoMemo" placeholder="メモを入力..." class="modal-textarea" rows="3"></textarea>
                 </div>
             </div>
             <div class="modal-footer">

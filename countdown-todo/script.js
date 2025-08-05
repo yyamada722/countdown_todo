@@ -2,7 +2,6 @@
 let todos = [];
 let clockInterval;
 let syncInterval;
-let schedules = []; // スケジュール（繰り返しタスク）の配列
 
 // カウントダウンのみを更新する関数
 function updateCountdownsOnly() {
@@ -52,10 +51,7 @@ let notifiedTodos = new Set(); // 通知済みのTodoIDを記録
 let preNotifiedTodos = new Set(); // 事前通知済みのTodoIDを記録
 let currentFilter = 'active'; // 現在のフィルター状態
 let userStats = null; // ユーザー統計情報
-let presets = []; // プリセット一覧
-let showRoutineTasks = false; // ルーティンタスクの表示フラグ
-let weeklyViewContainer;
-let scheduleContainer;
+const weeklyViewContainer = document.getElementById('weeklyViewContainer');
 
 // DOM要素
 const todoContainer = document.getElementById('todoContainer');
@@ -104,15 +100,9 @@ let editingTodoId = null;
 
 // 初期化
 function init() {
-    // DOM要素を取得
-    weeklyViewContainer = document.getElementById('weeklyViewContainer');
-    scheduleContainer = document.getElementById('scheduleContainer');
-    
     // サーバーからデータを取得
     syncWithServer();
     loadUserStats();
-    loadPresets();
-    loadSchedules();
     
     // 定期的な同期を開始（5秒ごと）
     syncInterval = setInterval(syncWithServer, 5000);
@@ -166,18 +156,6 @@ async function loadUserStats() {
         }
     } catch (error) {
         console.error('統計読み込みエラー:', error);
-    }
-}
-
-// プリセットを読み込む
-async function loadPresets() {
-    try {
-        const response = await fetch('/api/presets');
-        if (response.ok) {
-            presets = await response.json();
-        }
-    } catch (error) {
-        console.error('プリセット読み込みエラー:', error);
     }
 }
 
@@ -594,19 +572,6 @@ function openEditModal(id) {
     
     // メモプレビューを更新
     updateMemoPreview();
-    
-    // タブの初期化
-    setupTabs();
-    
-    // スマホの場合とメモがある場合の判定
-    const isMobile = window.innerWidth <= 768;
-    
-    // スマホでメモがある場合、またはPC/タブレットでもメモがある場合はメモタブを優先
-    if (todo.memo && (isMobile || todo.memo.length > 50)) {
-        switchToTab('memo');
-    } else {
-        switchToTab('edit');
-    }
     
     // 日時を入力フィールドの形式に変換
     const deadline = new Date(todo.deadline);
@@ -1183,10 +1148,6 @@ function renderTodos() {
     switch (currentFilter) {
         case 'active':
             filteredTodos = filteredTodos.filter(todo => !todo.archived);
-            // ルーティンタスクを除外するオプション
-            if (!showRoutineTasks) {
-                filteredTodos = filteredTodos.filter(todo => !todo.isRoutine);
-            }
             break;
         case 'today':
             filteredTodos = filteredTodos.filter(todo => {
@@ -1227,20 +1188,7 @@ function renderTodos() {
         return a.deadline.getTime() - b.deadline.getTime();
     });
     
-    // アクティブタブの場合はルーティンタスクトグルを表示
-    let headerHtml = '';
-    if (currentFilter === 'active') {
-        headerHtml = `
-            <div class="routine-toggle-container">
-                <label class="routine-toggle">
-                    <input type="checkbox" id="routineToggle" ${showRoutineTasks ? 'checked' : ''}>
-                    <span>ルーティンタスクを表示</span>
-                </label>
-            </div>
-        `;
-    }
-    
-    todoContainer.innerHTML = headerHtml;
+    todoContainer.innerHTML = '';
     
     // アニメーション中のタスクを最初に表示
     animatingTodos.forEach(todo => {
@@ -1258,11 +1206,6 @@ function renderTodos() {
         
         const todoCard = document.createElement('div');
         let cardClasses = `todo-card ${timeInfo.cardClass} ${todo.archived ? 'archived' : ''}`;
-        
-        // ルーティンタスクのクラス
-        if (todo.isRoutine) {
-            cardClasses += ' routine-task';
-        }
         
         // アニメーション中の特別なクラス
         if (todo.isAnimating) {
@@ -1326,11 +1269,6 @@ function renderTodos() {
         
         const todoCard = document.createElement('div');
         let cardClasses = `todo-card ${timeInfo.cardClass} ${todo.archived ? 'archived' : ''}`;
-        
-        // ルーティンタスクのクラス
-        if (todo.isRoutine) {
-            cardClasses += ' routine-task';
-        }
         
         // アニメーション中の特別なクラス
         if (todo.isAnimating) {
@@ -1433,17 +1371,6 @@ function renderTodos() {
         
         todoContainer.appendChild(todoCard);
     });
-    
-    // ルーティンタスクトグルのイベントリスナー
-    if (currentFilter === 'active') {
-        const routineToggle = document.getElementById('routineToggle');
-        if (routineToggle) {
-            routineToggle.addEventListener('change', (e) => {
-                showRoutineTasks = e.target.checked;
-                renderTodos();
-            });
-        }
-    }
 }
 
 // カレンダーをセットアップ
@@ -1626,36 +1553,9 @@ function updateMemoPreview() {
     
     if (memoText) {
         preview.innerHTML = parseMemoMarkdown(memoText);
+        preview.style.display = 'block';
     } else {
-        preview.innerHTML = '<p style="color: #666; text-align: center;">メモがありません</p>';
-    }
-}
-
-// タブの初期化
-function setupTabs() {
-    const tabButtons = document.querySelectorAll('.tab-button');
-    tabButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            const tabName = button.getAttribute('data-tab');
-            switchToTab(tabName);
-        });
-    });
-}
-
-// タブ切り替え
-function switchToTab(tabName) {
-    // タブボタンの切り替え
-    document.querySelectorAll('.tab-button').forEach(btn => {
-        btn.classList.toggle('active', btn.getAttribute('data-tab') === tabName);
-    });
-    
-    // タブコンテンツの切り替え
-    document.getElementById('editTab').classList.toggle('active', tabName === 'edit');
-    document.getElementById('memoTab').classList.toggle('active', tabName === 'memo');
-    
-    // メモタブが選択された時はプレビューを更新
-    if (tabName === 'memo') {
-        updateMemoPreview();
+        preview.style.display = 'none';
     }
 }
 
@@ -1687,26 +1587,17 @@ function setupFilterTabs() {
                 todoContainer.style.display = 'none';
                 statsContainer.style.display = 'block';
                 weeklyViewContainer.style.display = 'none';
-                scheduleContainer.style.display = 'none';
                 // 統計タブを開いた時に最新の統計情報を読み込む
                 loadUserStats().then(() => renderStats());
             } else if (currentFilter === 'weekly') {
                 todoContainer.style.display = 'none';
                 statsContainer.style.display = 'none';
                 weeklyViewContainer.style.display = 'block';
-                scheduleContainer.style.display = 'none';
                 renderWeeklyView();
-            } else if (currentFilter === 'schedule') {
-                todoContainer.style.display = 'none';
-                statsContainer.style.display = 'none';
-                weeklyViewContainer.style.display = 'none';
-                scheduleContainer.style.display = 'block';
-                loadPresets().then(() => renderScheduleView());
             } else {
                 todoContainer.style.display = 'flex';
                 statsContainer.style.display = 'none';
                 weeklyViewContainer.style.display = 'none';
-                scheduleContainer.style.display = 'none';
                 renderTodos();
             }
         });
@@ -3040,9 +2931,6 @@ function renderWeeklyView() {
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const weekDays = ['日', '月', '火', '水', '木', '金', '土'];
     
-    // PC判定
-    const isPC = window.innerWidth >= 768 && !('ontouchstart' in window);
-    
     // 今日から7日間のタスクを取得
     const weekTasks = [];
     for (let i = 0; i < 7; i++) {
@@ -3061,8 +2949,7 @@ function renderWeeklyView() {
             date: date,
             tasks: dayTasks,
             dayName: weekDays[date.getDay()],
-            isToday: i === 0,
-            dateStr: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` // YYYY-MM-DD形式（ローカル時間）
+            isToday: i === 0
         });
     }
     
@@ -3074,17 +2961,6 @@ function renderWeeklyView() {
         return new Date(todo.deadline) >= futureDate;
     });
     
-    // 今日完了したタスクを取得
-    const todayStart = new Date(today);
-    const todayEnd = new Date(today);
-    todayEnd.setDate(todayEnd.getDate() + 1);
-    
-    const completedTodayTasks = todos.filter(todo => {
-        if (!todo.archived || !todo.archivedAt) return false;
-        const archivedDate = new Date(todo.archivedAt);
-        return archivedDate >= todayStart && archivedDate < todayEnd;
-    }).sort((a, b) => new Date(b.archivedAt) - new Date(a.archivedAt));
-    
     // HTMLを生成
     let html = '<div class="weekly-view">';
     
@@ -3093,13 +2969,13 @@ function renderWeeklyView() {
     weekTasks.forEach(day => {
         const dateStr = `${day.date.getMonth() + 1}/${day.date.getDate()}`;
         html += `
-            <div class="day-column ${day.isToday ? 'today' : ''}" data-date="${day.dateStr}">
+            <div class="day-column ${day.isToday ? 'today' : ''}">
                 <div class="day-header">
                     <div class="day-name">${day.dayName}</div>
                     <div class="day-date">${dateStr}</div>
                     <div class="day-count">${day.tasks.length}件</div>
                 </div>
-                <div class="day-tasks ${isPC ? 'droppable' : ''}">
+                <div class="day-tasks">
         `;
         
         if (day.tasks.length === 0) {
@@ -3109,7 +2985,7 @@ function renderWeeklyView() {
                 const time = new Date(task.deadline);
                 const timeStr = `${String(time.getHours()).padStart(2, '0')}:${String(time.getMinutes()).padStart(2, '0')}`;
                 html += `
-                    <div class="week-task-item${isPC ? ' draggable' : ''}" data-task-id="${task.id}" ${isPC ? 'draggable="true"' : ''}>
+                    <div class="week-task-item">
                         <div class="week-task-time">${timeStr}</div>
                         <div class="week-task-title">${escapeHtml(task.title)}</div>
                     </div>
@@ -3159,43 +3035,9 @@ function renderWeeklyView() {
         html += '</div></div>';
     }
     
-    // 今日完了したタスクの表示
-    if (completedTodayTasks.length > 0) {
-        html += '<div class="completed-today-section">';
-        html += `<h3 class="completed-today-header">今日完了したタスク（${completedTodayTasks.length}件）</h3>`;
-        html += '<div class="completed-today-list">';
-        
-        completedTodayTasks.forEach(task => {
-            const completedTime = new Date(task.archivedAt);
-            const timeStr = `${String(completedTime.getHours()).padStart(2, '0')}:${String(completedTime.getMinutes()).padStart(2, '0')}`;
-            const originalDeadline = new Date(task.deadline);
-            const deadlineStr = `${String(originalDeadline.getHours()).padStart(2, '0')}:${String(originalDeadline.getMinutes()).padStart(2, '0')}`;
-            
-            html += `
-                <div class="completed-task-item">
-                    <div class="completed-task-info">
-                        <span class="completed-check">✓</span>
-                        <span class="completed-task-title">${escapeHtml(task.title)}</span>
-                    </div>
-                    <div class="completed-task-times">
-                        <span class="deadline-time">期限: ${deadlineStr}</span>
-                        <span class="completed-time">完了: ${timeStr}</span>
-                    </div>
-                </div>
-            `;
-        });
-        
-        html += '</div></div>';
-    }
-    
     html += '</div>';
     
     weeklyViewContainer.innerHTML = html;
-    
-    // PCの場合はドラッグアンドドロップを設定
-    if (isPC) {
-        setupWeeklyDragAndDrop();
-    }
 }
 
 // HTMLエスケープ関数
@@ -3205,990 +3047,6 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// スケジュールビューをレンダリング
-function renderScheduleView() {
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const todayEnd = new Date(todayStart);
-    todayEnd.setDate(todayEnd.getDate() + 1);
-    
-    // HTMLを生成
-    let html = '<div class="schedule-view">';
-    
-    // プリセット一覧セクション
-    html += '<div class="preset-list-section">';
-    html += '<h3 class="preset-list-header">プリセット一覧</h3>';
-    html += '<div class="preset-cards-container">';
-    
-    if (presets.length > 0) {
-        presets.forEach(preset => {
-            html += `
-                <div class="preset-card">
-                    <div class="preset-card-header">
-                        <h4>${escapeHtml(preset.name)}</h4>
-                        <div class="preset-card-actions">
-                            <button class="preset-btn edit" onclick="openPresetEditModal(${preset.id})">編集</button>
-                            <button class="preset-btn delete" onclick="deletePreset(${preset.id})">削除</button>
-                        </div>
-                    </div>
-                    <div class="preset-task-list">
-            `;
-            
-            // プリセット内のタスクを表示
-            if (preset.tasks && preset.tasks.length > 0) {
-                preset.tasks.forEach(task => {
-                    html += `
-                        <div class="preset-task-item">
-                            <span class="preset-task-time">${task.time}</span>
-                            <span class="preset-task-title">${escapeHtml(task.title)}</span>
-                        </div>
-                    `;
-                });
-            }
-            
-            html += `
-                    </div>
-                    <div class="preset-card-footer">
-                        <button class="preset-apply-btn" onclick="applyPreset(false, ${preset.id})">今日に適用</button>
-                        <button class="preset-apply-btn" onclick="applyPreset(true, ${preset.id})">明日に適用</button>
-                    </div>
-                </div>
-            `;
-        });
-    } else {
-        html += '<p class="no-presets">登録されたプリセットがありません</p>';
-    }
-    
-    html += '</div>';
-    html += '<button class="preset-create-btn" id="createNewPresetBtn">新規プリセット作成</button>';
-    html += '</div>';
-    
-    // テンプレートタスクセクション
-    html += '<div class="template-tasks-section">';
-    html += '<h3 class="template-tasks-header">テンプレートタスク</h3>';
-    
-    // よくあるテンプレートタスクを定義
-    const templateTasks = [
-        { time: '06:00', title: '起床' },
-        { time: '06:30', title: '朝食' },
-        { time: '07:00', title: '運動・ランニング' },
-        { time: '08:00', title: '仕事開始' },
-        { time: '09:00', title: 'メールチェック' },
-        { time: '10:00', title: '重要なタスク' },
-        { time: '12:00', title: '昼食' },
-        { time: '13:00', title: '午後の作業' },
-        { time: '15:00', title: '休憩' },
-        { time: '17:00', title: '日報作成' },
-        { time: '18:00', title: '仕事終了' },
-        { time: '19:00', title: '夕食' },
-        { time: '20:00', title: '自由時間' },
-        { time: '21:00', title: '勉強・読書' },
-        { time: '22:00', title: '入浴' },
-        { time: '23:00', title: '就寝準備' }
-    ];
-    
-    html += '<div class="template-task-list">';
-    templateTasks.forEach((task, index) => {
-        html += `
-            <div class="template-task-item" data-template-index="${index}">
-                <input type="checkbox" class="template-checkbox" id="template-${index}">
-                <div class="template-task-content">
-                    <input type="time" class="template-time-input" value="${task.time}" 
-                           id="template-time-${index}">
-                    <input type="text" class="template-title-input" value="${escapeHtml(task.title)}" 
-                           placeholder="タスク名" id="template-title-${index}">
-                </div>
-            </div>
-        `;
-    });
-    html += '</div>';
-    
-    html += '<div class="template-actions">';
-    html += '<button class="template-action-btn" id="addTemplatesToday">選択したタスクを今日に追加</button>';
-    html += '<button class="template-action-btn" id="addTemplatesTomorrow">選択したタスクを明日に追加</button>';
-    html += '</div>';
-    
-    html += '</div>';
-    html += '</div>';
-    
-    scheduleContainer.innerHTML = html;
-    
-    // 新規プリセット作成ボタンのイベント
-    const createNewPresetBtn = document.getElementById('createNewPresetBtn');
-    if (createNewPresetBtn) {
-        createNewPresetBtn.addEventListener('click', () => openPresetEditModal());
-    }
-    
-    // テンプレートタスクを今日に追加ボタンのイベント
-    const addTemplatesTodayBtn = document.getElementById('addTemplatesToday');
-    if (addTemplatesTodayBtn) {
-        addTemplatesTodayBtn.addEventListener('click', () => addTemplateTasksToDate(false));
-    }
-    
-    // テンプレートタスクを明日に追加ボタンのイベント
-    const addTemplatesTomorrowBtn = document.getElementById('addTemplatesTomorrow');
-    if (addTemplatesTomorrowBtn) {
-        addTemplatesTomorrowBtn.addEventListener('click', () => addTemplateTasksToDate(true));
-    }
-}
-
-// プリセットを適用
-async function applyPreset(isTomorrow = false, presetId = null) {
-    // presetIdが指定されていない場合は、セレクトボックスから取得
-    if (!presetId) {
-        const presetSelect = document.getElementById('presetSelect');
-        if (presetSelect) {
-            presetId = parseInt(presetSelect.value);
-        }
-    }
-    
-    if (!presetId) {
-        alert('プリセットを選択してください');
-        return;
-    }
-    
-    // 選択されたプリセットを取得
-    const preset = presets.find(p => p.id === presetId);
-    if (!preset) return;
-    
-    // 確認ダイアログ
-    const targetDay = isTomorrow ? '明日' : '今日';
-    const message = `「${preset.name}」を${targetDay}のスケジュールに適用しますか？\n\n含まれるタスク：\n${preset.tasks.map(t => `・${t.time} ${t.title}`).join('\n')}`;
-    
-    if (!confirm(message)) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/api/presets/${presetId}/apply`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                targetDate: isTomorrow ? 'tomorrow' : 'today'
-            })
-        });
-        
-        if (response.ok) {
-            const result = await response.json();
-            await syncWithServer();
-            await loadPresets(); // プリセットの最終使用日を更新
-            renderScheduleView();
-            
-            // 成功通知
-            const notification = document.createElement('div');
-            notification.className = 'notification-popup success';
-            notification.textContent = `${targetDay}に${result.createdTodos.length}個のタスクを作成しました`;
-            document.getElementById('notificationContainer').appendChild(notification);
-            setTimeout(() => notification.remove(), 3000);
-        } else {
-            alert('プリセットの適用に失敗しました');
-        }
-    } catch (error) {
-        console.error('プリセット適用エラー:', error);
-        alert('エラーが発生しました');
-    }
-}
-
-// プリセット管理モーダルを開く
-function openPresetModal() {
-    // 既存のモーダルを削除
-    const existingModal = document.getElementById('presetModalOverlay');
-    if (existingModal) {
-        existingModal.remove();
-    }
-    
-    // プリセット管理モーダルのHTMLを作成
-    const modalHtml = `
-        <div class="modal-overlay" id="presetModalOverlay">
-            <div class="modal preset-modal">
-                <div class="modal-header">
-                    <h2>プリセット管理</h2>
-                    <button class="modal-close" id="closePresetModal">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <div class="preset-list" id="presetList"></div>
-                    <button class="btn-create" id="createNewPreset">新規プリセット作成</button>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
-    
-    // モーダルを表示
-    const modal = document.getElementById('presetModalOverlay');
-    if (modal) {
-        modal.classList.add('active');
-    }
-    
-    // プリセット一覧を表示
-    renderPresetList();
-    
-    // イベントリスナー設定
-    document.getElementById('closePresetModal').addEventListener('click', closePresetModal);
-    document.getElementById('presetModalOverlay').addEventListener('click', (e) => {
-        if (e.target.id === 'presetModalOverlay') {
-            closePresetModal();
-        }
-    });
-    document.getElementById('createNewPreset').addEventListener('click', () => {
-        closePresetModal();
-        openPresetEditModal();
-    });
-}
-
-// プリセット管理モーダルを閉じる
-function closePresetModal() {
-    const modal = document.getElementById('presetModalOverlay');
-    if (modal) {
-        modal.remove();
-    }
-}
-
-// プリセット一覧をレンダリング
-function renderPresetList() {
-    const presetListEl = document.getElementById('presetList');
-    if (!presetListEl) return;
-    
-    if (presets.length === 0) {
-        presetListEl.innerHTML = '<p class="no-presets">プリセットがありません</p>';
-        return;
-    }
-    
-    let html = '';
-    presets.forEach(preset => {
-        html += `
-            <div class="preset-item">
-                <div class="preset-info">
-                    <h4>${escapeHtml(preset.name)}</h4>
-                    <p class="preset-tasks">${preset.tasks.length}個のタスク</p>
-                </div>
-                <div class="preset-actions">
-                    <button class="preset-btn edit" onclick="openPresetEditModal(${preset.id})">編集</button>
-                    <button class="preset-btn delete" onclick="deletePreset(${preset.id})">削除</button>
-                </div>
-            </div>
-        `;
-    });
-    
-    presetListEl.innerHTML = html;
-}
-
-// プリセット削除
-async function deletePreset(presetId) {
-    if (!confirm('このプリセットを削除しますか？')) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/api/presets/${presetId}`, {
-            method: 'DELETE'
-        });
-        
-        if (response.ok) {
-            await loadPresets();
-            renderPresetList();
-            renderScheduleView();
-        } else {
-            alert('プリセットの削除に失敗しました');
-        }
-    } catch (error) {
-        console.error('プリセット削除エラー:', error);
-        alert('エラーが発生しました');
-    }
-}
-
-// プリセット編集モーダルを開く
-function openPresetEditModal(presetId) {
-    const preset = presetId ? presets.find(p => p.id === presetId) : null;
-    const isNew = !preset;
-    
-    // 既存の編集モーダルを削除
-    const existingModal = document.getElementById('presetEditModalOverlay');
-    if (existingModal) {
-        existingModal.remove();
-    }
-    
-    // プリセット編集モーダルのHTMLを作成
-    const modalHtml = `
-        <div class="modal-overlay" id="presetEditModalOverlay">
-            <div class="modal preset-edit-modal">
-                <div class="modal-header">
-                    <h2>${isNew ? '新規プリセット作成' : 'プリセット編集'}</h2>
-                    <button class="modal-close" id="closePresetEditModal">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <div class="form-field">
-                        <label for="presetName">プリセット名</label>
-                        <input type="text" id="presetName" class="modal-input" 
-                               placeholder="例: 平日ルーティン" 
-                               value="${preset ? escapeHtml(preset.name) : ''}">
-                    </div>
-                    <div class="form-field">
-                        <label>タスク一覧</label>
-                        <div id="presetTaskList" class="preset-task-list"></div>
-                        <button class="btn-add-task" id="addPresetTask">タスクを追加</button>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn-cancel" id="cancelPresetEdit">キャンセル</button>
-                    <button class="btn-create" id="savePreset">${isNew ? '作成' : '更新'}</button>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
-    
-    // モーダルを表示
-    const modal = document.getElementById('presetEditModalOverlay');
-    if (modal) {
-        modal.classList.add('active');
-    }
-    
-    // 既存タスクを表示
-    if (preset && preset.tasks) {
-        preset.tasks.forEach(task => {
-            addPresetTaskRow(task);
-        });
-    } else {
-        // 新規の場合は空のタスクを1つ追加
-        addPresetTaskRow();
-    }
-    
-    // イベントリスナー設定
-    document.getElementById('closePresetEditModal').addEventListener('click', closePresetEditModal);
-    document.getElementById('presetEditModalOverlay').addEventListener('click', (e) => {
-        if (e.target.id === 'presetEditModalOverlay') {
-            closePresetEditModal();
-        }
-    });
-    document.getElementById('cancelPresetEdit').addEventListener('click', closePresetEditModal);
-    document.getElementById('addPresetTask').addEventListener('click', () => addPresetTaskRow());
-    document.getElementById('savePreset').addEventListener('click', () => savePreset(presetId));
-}
-
-// プリセット編集モーダルを閉じる
-function closePresetEditModal() {
-    const modal = document.getElementById('presetEditModalOverlay');
-    if (modal) {
-        modal.remove();
-    }
-}
-
-// プリセットタスク行を追加
-function addPresetTaskRow(task = null) {
-    const taskList = document.getElementById('presetTaskList');
-    const taskId = Date.now() + Math.random();
-    
-    const taskRow = document.createElement('div');
-    taskRow.className = 'preset-task-row';
-    taskRow.dataset.taskId = taskId;
-    taskRow.innerHTML = `
-        <input type="time" class="preset-task-time" value="${task ? task.time : '09:00'}">
-        <input type="text" class="preset-task-title" placeholder="タスク名" 
-               value="${task ? escapeHtml(task.title) : ''}">
-        <button class="preset-task-remove" onclick="removePresetTaskRow(${taskId})">×</button>
-    `;
-    
-    taskList.appendChild(taskRow);
-}
-
-// プリセットタスク行を削除
-function removePresetTaskRow(taskId) {
-    const taskRow = document.querySelector(`[data-task-id="${taskId}"]`);
-    if (taskRow) {
-        taskRow.remove();
-    }
-}
-
-// プリセットを保存
-async function savePreset(presetId) {
-    const name = document.getElementById('presetName').value.trim();
-    if (!name) {
-        alert('プリセット名を入力してください');
-        return;
-    }
-    
-    // タスクを収集
-    const tasks = [];
-    const taskRows = document.querySelectorAll('.preset-task-row');
-    
-    for (const row of taskRows) {
-        const time = row.querySelector('.preset-task-time').value;
-        const title = row.querySelector('.preset-task-title').value.trim();
-        
-        if (title) {
-            tasks.push({ time, title });
-        }
-    }
-    
-    if (tasks.length === 0) {
-        alert('少なくとも1つのタスクを追加してください');
-        return;
-    }
-    
-    // タスクを時間順にソート
-    tasks.sort((a, b) => a.time.localeCompare(b.time));
-    
-    try {
-        const url = presetId ? `/api/presets/${presetId}` : '/api/presets';
-        const method = presetId ? 'PUT' : 'POST';
-        
-        const response = await fetch(url, {
-            method,
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ name, tasks })
-        });
-        
-        if (response.ok) {
-            await loadPresets();
-            closePresetEditModal();
-            
-            // プリセット管理モーダルが開いている場合は更新
-            if (document.getElementById('presetList')) {
-                renderPresetList();
-            }
-            
-            // スケジュールビューを更新
-            if (currentFilter === 'schedule') {
-                renderScheduleView();
-            }
-        } else {
-            alert('プリセットの保存に失敗しました');
-        }
-    } catch (error) {
-        console.error('プリセット保存エラー:', error);
-        alert('エラーが発生しました');
-    }
-}
-
-// スケジュールを読み込む
-async function loadSchedules() {
-    try {
-        const response = await fetch('/api/schedules');
-        if (response.ok) {
-            schedules = await response.json();
-        }
-    } catch (error) {
-        console.error('スケジュール読み込みエラー:', error);
-        schedules = [];
-    }
-}
-
-// 繰り返しタイプのテキストを取得
-function getRepeatText(repeat) {
-    const repeatMap = {
-        'daily': '毎日',
-        'weekly': '毎週',
-        'biweekly': '隔週',
-        'monthly': '毎月',
-        'weekdays': '平日のみ'
-    };
-    return repeatMap[repeat] || 'なし';
-}
-
-// スケジュール登録モーダルを開く
-function openScheduleModal() {
-    // 既存のモーダルを削除
-    const existingModal = document.getElementById('scheduleModalOverlay');
-    if (existingModal) {
-        existingModal.remove();
-    }
-    
-    const modalHtml = `
-        <div class="modal-overlay" id="scheduleModalOverlay">
-            <div class="modal">
-                <div class="modal-header">
-                    <h2>新規スケジュール登録</h2>
-                    <button class="modal-close" id="closeScheduleModal">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <div class="form-field">
-                        <label for="scheduleTitle">タスク名</label>
-                        <input type="text" id="scheduleTitle" placeholder="タスク名を入力" class="modal-input">
-                    </div>
-                    <div class="form-field">
-                        <label for="scheduleTime">実行時刻</label>
-                        <input type="time" id="scheduleTime" class="modal-input" value="09:00">
-                    </div>
-                    <div class="form-field">
-                        <label for="scheduleRepeat">繰り返し</label>
-                        <select id="scheduleRepeat" class="modal-select">
-                            <option value="daily">毎日</option>
-                            <option value="weekly">毎週</option>
-                            <option value="biweekly">隔週</option>
-                            <option value="monthly">毎月</option>
-                            <option value="weekdays">平日のみ</option>
-                        </select>
-                    </div>
-                    <div class="form-field">
-                        <label for="scheduleMemo">メモ（任意）</label>
-                        <textarea id="scheduleMemo" placeholder="メモを入力..." class="modal-textarea" rows="3"></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn-cancel" id="cancelSchedule">キャンセル</button>
-                    <button class="btn-create" id="createSchedule">登録</button>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
-    
-    // モーダルを表示
-    const modal = document.getElementById('scheduleModalOverlay');
-    if (modal) {
-        modal.classList.add('active');
-    }
-    
-    // イベントリスナー設定
-    document.getElementById('closeScheduleModal').addEventListener('click', closeScheduleModal);
-    document.getElementById('scheduleModalOverlay').addEventListener('click', (e) => {
-        if (e.target.id === 'scheduleModalOverlay') {
-            closeScheduleModal();
-        }
-    });
-    document.getElementById('cancelSchedule').addEventListener('click', closeScheduleModal);
-    document.getElementById('createSchedule').addEventListener('click', createSchedule);
-}
-
-// スケジュール登録モーダルを閉じる
-function closeScheduleModal() {
-    const modal = document.getElementById('scheduleModalOverlay');
-    if (modal) {
-        modal.remove();
-    }
-}
-
-// スケジュールを作成
-async function createSchedule() {
-    const title = document.getElementById('scheduleTitle').value.trim();
-    const time = document.getElementById('scheduleTime').value;
-    const repeat = document.getElementById('scheduleRepeat').value;
-    const memo = document.getElementById('scheduleMemo').value.trim();
-    
-    if (!title) {
-        alert('タスク名を入力してください');
-        return;
-    }
-    
-    try {
-        const response = await fetch('/api/schedules', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ title, time, repeat, memo })
-        });
-        
-        if (response.ok) {
-            await loadSchedules();
-            closeScheduleModal();
-            renderScheduleView();
-        } else {
-            alert('スケジュールの登録に失敗しました');
-        }
-    } catch (error) {
-        console.error('スケジュール作成エラー:', error);
-        alert('エラーが発生しました');
-    }
-}
-
-// スケジュールを編集
-async function editSchedule(scheduleId) {
-    const schedule = schedules.find(s => s.id === scheduleId);
-    if (!schedule) return;
-    
-    // 既存の編集モーダルを削除
-    const existingModal = document.getElementById('scheduleEditModalOverlay');
-    if (existingModal) {
-        existingModal.remove();
-    }
-    
-    const modalHtml = `
-        <div class="modal-overlay" id="scheduleEditModalOverlay">
-            <div class="modal">
-                <div class="modal-header">
-                    <h2>スケジュール編集</h2>
-                    <button class="modal-close" id="closeScheduleEditModal">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <div class="form-field">
-                        <label for="editScheduleTitle">タスク名</label>
-                        <input type="text" id="editScheduleTitle" value="${escapeHtml(schedule.title)}" class="modal-input">
-                    </div>
-                    <div class="form-field">
-                        <label for="editScheduleTime">実行時刻</label>
-                        <input type="time" id="editScheduleTime" value="${schedule.time}" class="modal-input">
-                    </div>
-                    <div class="form-field">
-                        <label for="editScheduleRepeat">繰り返し</label>
-                        <select id="editScheduleRepeat" class="modal-select">
-                            <option value="daily" ${schedule.repeat === 'daily' ? 'selected' : ''}>毎日</option>
-                            <option value="weekly" ${schedule.repeat === 'weekly' ? 'selected' : ''}>毎週</option>
-                            <option value="biweekly" ${schedule.repeat === 'biweekly' ? 'selected' : ''}>隔週</option>
-                            <option value="monthly" ${schedule.repeat === 'monthly' ? 'selected' : ''}>毎月</option>
-                            <option value="weekdays" ${schedule.repeat === 'weekdays' ? 'selected' : ''}>平日のみ</option>
-                        </select>
-                    </div>
-                    <div class="form-field">
-                        <label for="editScheduleMemo">メモ（任意）</label>
-                        <textarea id="editScheduleMemo" class="modal-textarea" rows="3">${escapeHtml(schedule.memo || '')}</textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn-cancel" id="cancelEditSchedule">キャンセル</button>
-                    <button class="btn-create" id="updateSchedule">更新</button>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
-    
-    // モーダルを表示
-    const modal = document.getElementById('scheduleEditModalOverlay');
-    if (modal) {
-        modal.classList.add('active');
-    }
-    
-    // イベントリスナー設定
-    document.getElementById('closeScheduleEditModal').addEventListener('click', closeScheduleEditModal);
-    document.getElementById('scheduleEditModalOverlay').addEventListener('click', (e) => {
-        if (e.target.id === 'scheduleEditModalOverlay') {
-            closeScheduleEditModal();
-        }
-    });
-    document.getElementById('cancelEditSchedule').addEventListener('click', closeScheduleEditModal);
-    document.getElementById('updateSchedule').addEventListener('click', () => updateSchedule(scheduleId));
-}
-
-// スケジュール編集モーダルを閉じる
-function closeScheduleEditModal() {
-    const modal = document.getElementById('scheduleEditModalOverlay');
-    if (modal) {
-        modal.remove();
-    }
-}
-
-// スケジュールを更新
-async function updateSchedule(scheduleId) {
-    const title = document.getElementById('editScheduleTitle').value.trim();
-    const time = document.getElementById('editScheduleTime').value;
-    const repeat = document.getElementById('editScheduleRepeat').value;
-    const memo = document.getElementById('editScheduleMemo').value.trim();
-    
-    if (!title) {
-        alert('タスク名を入力してください');
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/api/schedules/${scheduleId}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ title, time, repeat, memo })
-        });
-        
-        if (response.ok) {
-            await loadSchedules();
-            closeScheduleEditModal();
-            renderScheduleView();
-        } else {
-            alert('スケジュールの更新に失敗しました');
-        }
-    } catch (error) {
-        console.error('スケジュール更新エラー:', error);
-        alert('エラーが発生しました');
-    }
-}
-
-// スケジュールを削除
-async function deleteSchedule(scheduleId) {
-    if (!confirm('このスケジュールを削除しますか？')) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/api/schedules/${scheduleId}`, {
-            method: 'DELETE'
-        });
-        
-        if (response.ok) {
-            await loadSchedules();
-            renderScheduleView();
-        } else {
-            alert('スケジュールの削除に失敗しました');
-        }
-    } catch (error) {
-        console.error('スケジュール削除エラー:', error);
-        alert('エラーが発生しました');
-    }
-}
-
-// タスクを一括生成
-async function batchCreateTasks(isTomorrow = false) {
-    const scheduleSelect = document.getElementById('scheduleSelect');
-    const selectedValue = scheduleSelect.value;
-    
-    if (!selectedValue) {
-        alert('スケジュールを選択してください');
-        return;
-    }
-    
-    // 選択されたスケジュールを取得
-    let selectedSchedules = [];
-    if (selectedValue === 'all') {
-        selectedSchedules = schedules;
-    } else {
-        const schedule = schedules.find(s => s.id === parseInt(selectedValue));
-        if (schedule) {
-            selectedSchedules = [schedule];
-        }
-    }
-    
-    if (selectedSchedules.length === 0) {
-        alert('スケジュールが見つかりません');
-        return;
-    }
-    
-    // 確認ダイアログ
-    const targetDay = isTomorrow ? '明日' : '今日';
-    const taskCount = selectedSchedules.length;
-    const message = `${targetDay}に${taskCount}個のタスクを作成しますか？\n\n作成されるタスク：\n${selectedSchedules.map(s => `・${s.time} ${s.title}`).join('\n')}`;
-    
-    if (!confirm(message)) {
-        return;
-    }
-    
-    try {
-        const response = await fetch('/api/schedules/batch-create', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                scheduleIds: selectedSchedules.map(s => s.id),
-                targetDate: isTomorrow ? 'tomorrow' : 'today'
-            })
-        });
-        
-        if (response.ok) {
-            const result = await response.json();
-            await syncWithServer();
-            renderScheduleView();
-            
-            // 成功通知
-            const notification = document.createElement('div');
-            notification.className = 'notification-popup success';
-            notification.textContent = `${targetDay}に${result.createdCount}個のタスクを作成しました`;
-            document.getElementById('notificationContainer').appendChild(notification);
-            setTimeout(() => notification.remove(), 3000);
-        } else {
-            alert('タスクの作成に失敗しました');
-        }
-    } catch (error) {
-        console.error('タスク一括生成エラー:', error);
-        alert('エラーが発生しました');
-    }
-}
-
-// 週間ビューのドラッグアンドドロップを設定
-function setupWeeklyDragAndDrop() {
-    let draggedElement = null;
-    let draggedTaskId = null;
-    
-    // ドラッグ可能な要素
-    const draggables = document.querySelectorAll('.week-task-item.draggable');
-    
-    draggables.forEach(draggable => {
-        draggable.addEventListener('dragstart', (e) => {
-            draggedElement = e.target;
-            draggedTaskId = parseInt(e.target.dataset.taskId);
-            e.target.classList.add('dragging');
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/html', e.target.innerHTML);
-        });
-        
-        draggable.addEventListener('dragend', (e) => {
-            e.target.classList.remove('dragging');
-        });
-    });
-    
-    // ドロップ可能なエリア
-    const droppables = document.querySelectorAll('.day-tasks.droppable');
-    
-    droppables.forEach(droppable => {
-        droppable.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            droppable.classList.add('drag-over');
-        });
-        
-        droppable.addEventListener('dragleave', () => {
-            droppable.classList.remove('drag-over');
-        });
-        
-        droppable.addEventListener('drop', async (e) => {
-            e.preventDefault();
-            droppable.classList.remove('drag-over');
-            
-            if (!draggedTaskId) return;
-            
-            // ドロップ先の日付を取得
-            const dayColumn = droppable.closest('.day-column');
-            const targetDate = dayColumn.dataset.date;
-            
-            // タスクを取得
-            const task = todos.find(t => t.id === draggedTaskId);
-            if (!task) return;
-            
-            // 新しい期限を計算（時間は保持）
-            const oldDeadline = new Date(task.deadline);
-            const [year, month, day] = targetDate.split('-').map(Number);
-            const newDate = new Date(year, month - 1, day);
-            newDate.setHours(oldDeadline.getHours());
-            newDate.setMinutes(oldDeadline.getMinutes());
-            newDate.setSeconds(0);
-            newDate.setMilliseconds(0);
-            
-            // タスクを更新
-            try {
-                const response = await fetch(`/api/todos/${draggedTaskId}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        ...task,
-                        deadline: newDate.toISOString()
-                    })
-                });
-                
-                if (response.ok) {
-                    await syncWithServer();
-                    renderWeeklyView();
-                    
-                    // 成功通知
-                    const notification = document.createElement('div');
-                    notification.className = 'notification-popup success';
-                    notification.textContent = 'タスクを移動しました';
-                    document.getElementById('notificationContainer').appendChild(notification);
-                    setTimeout(() => notification.remove(), 2000);
-                } else {
-                    alert('タスクの移動に失敗しました');
-                }
-            } catch (error) {
-                console.error('タスク移動エラー:', error);
-                alert('エラーが発生しました');
-            }
-        });
-    });
-}
-
-// テンプレートタスクを日付に追加
-async function addTemplateTasksToDate(isTomorrow = false) {
-    const selectedTasks = [];
-    const checkboxes = document.querySelectorAll('.template-checkbox:checked');
-    
-    if (checkboxes.length === 0) {
-        alert('タスクを選択してください');
-        return;
-    }
-    
-    // 基準日を設定
-    const baseDate = new Date();
-    if (isTomorrow) {
-        baseDate.setDate(baseDate.getDate() + 1);
-    }
-    baseDate.setHours(0, 0, 0, 0);
-    
-    // 選択されたタスクを収集
-    checkboxes.forEach(checkbox => {
-        const templateItem = checkbox.closest('.template-task-item');
-        const index = templateItem.dataset.templateIndex;
-        
-        // 編集された値を取得
-        const timeInput = document.getElementById(`template-time-${index}`);
-        const titleInput = document.getElementById(`template-title-${index}`);
-        
-        const time = timeInput.value;
-        const title = titleInput.value.trim();
-        
-        if (!title) return; // タイトルが空の場合はスキップ
-        
-        const [hours, minutes] = time.split(':').map(Number);
-        
-        const deadline = new Date(baseDate);
-        deadline.setHours(hours, minutes, 0, 0);
-        
-        selectedTasks.push({
-            title: title,
-            deadline: deadline.toISOString()
-        });
-    });
-    
-    // 確認メッセージ
-    const targetDay = isTomorrow ? '明日' : '今日';
-    const message = `${targetDay}に${selectedTasks.length}個のタスクを追加しますか？`;
-    
-    if (!confirm(message)) {
-        return;
-    }
-    
-    try {
-        // タスクを一括作成
-        for (const task of selectedTasks) {
-            const response = await fetch('/api/todos', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(task)
-            });
-            
-            if (!response.ok) {
-                throw new Error('タスクの作成に失敗しました');
-            }
-        }
-        
-        await syncWithServer();
-        
-        // 成功通知
-        const notification = document.createElement('div');
-        notification.className = 'notification-popup success';
-        notification.textContent = `${targetDay}に${selectedTasks.length}個のタスクを追加しました`;
-        document.getElementById('notificationContainer').appendChild(notification);
-        setTimeout(() => notification.remove(), 3000);
-        
-        // チェックボックスをリセット
-        checkboxes.forEach(checkbox => checkbox.checked = false);
-        
-        // アクティブタブに切り替え
-        document.querySelector('.filter-tab[data-filter="active"]').click();
-        
-    } catch (error) {
-        console.error('タスク追加エラー:', error);
-        alert('エラーが発生しました');
-    }
-}
-
 // グローバルに関数を公開
 window.dismissNotification = dismissNotification;
 window.snoozeNotification = snoozeNotification;
-window.openPresetEditModal = openPresetEditModal;
-window.deletePreset = deletePreset;
-window.removePresetTaskRow = removePresetTaskRow;
-window.editSchedule = editSchedule;
-window.deleteSchedule = deleteSchedule;
-window.batchCreateTasks = batchCreateTasks;
-window.openScheduleModal = openScheduleModal;
-window.applyPreset = applyPreset;
