@@ -774,22 +774,44 @@ async function completeTodo(id) {
             return;
         }
         
-        // 3秒後に白背景にして、さらに3秒後に削除
-        setTimeout(() => {
+        // アニメーションフェーズの管理
+        const checkAnimationPhase = () => {
             const animTodo = todos.find(t => t.id === animatingTodo.id);
-            if (animTodo) {
+            if (!animTodo) return;
+            
+            const elapsed = Date.now() - animTodo.animationStartTime;
+            
+            if (elapsed >= 3000 && !animTodo.animationPhase) {
+                // 3秒経過後、白背景フェーズへ
                 animTodo.animationPhase = 'white';
-                animTodo.animationStartTime = new Date().getTime();
+                animTodo.animationStartTime = Date.now();
                 playTimeChime(); // 0秒になった時に時報を再生
                 renderTodos();
+                
+                // 白背景フェーズの終了をチェック
+                setTimeout(() => {
+                    const checkWhitePhase = () => {
+                        const animTodo = todos.find(t => t.id === animatingTodo.id);
+                        if (!animTodo) return;
+                        
+                        const whiteElapsed = Date.now() - animTodo.animationStartTime;
+                        if (whiteElapsed >= 3000) {
+                            // アニメーション用タスクを削除
+                            todos = todos.filter(t => t.id !== animatingTodo.id);
+                            renderTodos();
+                        } else {
+                            requestAnimationFrame(checkWhitePhase);
+                        }
+                    };
+                    checkWhitePhase();
+                }, 100);
+            } else if (!animTodo.animationPhase) {
+                requestAnimationFrame(checkAnimationPhase);
             }
-            
-            setTimeout(() => {
-                // アニメーション用タスクを削除
-                todos = todos.filter(t => t.id !== animatingTodo.id);
-                renderTodos();
-            }, 3000);
-        }, 3000);
+        };
+        
+        // アニメーションフェーズのチェックを開始
+        requestAnimationFrame(checkAnimationPhase);
     } else {
         // 通常の完了処理
         if (todo.repeat) {
