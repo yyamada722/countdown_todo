@@ -1004,7 +1004,17 @@ function formatTimeRemaining(deadline, startType, startedAt, isAnimating, animat
         const hours = Math.floor((overdue % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
         const minutes = Math.floor((overdue % (1000 * 60 * 60)) / (1000 * 60));
         const seconds = Math.floor((overdue % (1000 * 60)) / 1000);
-        const milliseconds = Math.floor(overdue % 1000);
+        
+        // アニメーション中は実際の時間変化を反映したミリ秒を使用
+        let milliseconds;
+        if (isAnimating && animationPhase !== 'white') {
+            // アニメーション中は overdue の小数部分も含めて計算
+            const fractionalSeconds = (overdue % 1000);
+            milliseconds = Math.floor(fractionalSeconds);
+        } else {
+            // 通常時は現在時刻のミリ秒を使用
+            milliseconds = now.getMilliseconds();
+        }
         
         // 期限切れでも1分以内またはアニメーション中の場合は秒数表示
         const showSeconds = (overdue < 60000) || isAnimating;
@@ -1028,7 +1038,17 @@ function formatTimeRemaining(deadline, startType, startedAt, isAnimating, animat
     const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
     const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-    const milliseconds = Math.floor(diff % 1000);
+    
+    // アニメーション中は実際の時間変化を反映したミリ秒を使用
+    let milliseconds;
+    if (isAnimating) {
+        // アニメーション中は diff の小数部分も含めて計算
+        const fractionalSeconds = (diff % 1000);
+        milliseconds = Math.floor(fractionalSeconds);
+    } else {
+        // 通常時は現在時刻のミリ秒を使用
+        milliseconds = now.getMilliseconds();
+    }
     
     // 1分以内またはアニメーション中の場合は秒数も表示
     const showSeconds = (diff < 60000) || isAnimating;
