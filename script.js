@@ -5,6 +5,8 @@ let syncInterval;
 let schedules = []; // スケジュール（繰り返しタスク）の配列
 
 // カウントダウンのみを更新する関数
+let animationFrameId = null;
+
 function updateCountdownsOnly() {
     const countdownElements = document.querySelectorAll('.todo-card .countdown-time');
     
@@ -30,12 +32,12 @@ function updateCountdownsOnly() {
         
         // カウントダウンのテキストのみを更新
         element.textContent = timeInfo.expired && todo.animationPhase !== 'white' ? 
-            `+${timeInfo.showSeconds ? 
-                `${String(timeInfo.minutes).padStart(2, '0')}:${String(timeInfo.seconds).padStart(2, '0')}.${String(Math.floor(timeInfo.milliseconds / 100))}` :
+            `-${timeInfo.showSeconds ? 
+                `${String(timeInfo.minutes).padStart(2, '0')}:${String(timeInfo.seconds).padStart(2, '0')}.${String(Math.floor(timeInfo.milliseconds / 10)).padStart(2, '0')}` :
                 `${String(timeInfo.days).padStart(2, '0')}d${String(timeInfo.hours).padStart(2, '0')}h${String(timeInfo.minutes).padStart(2, '0')}m`
             }` :
-            `-${timeInfo.showSeconds ? 
-                `${String(timeInfo.minutes).padStart(2, '0')}:${String(timeInfo.seconds).padStart(2, '0')}.${String(Math.floor(timeInfo.milliseconds / 100))}` :
+            `+${timeInfo.showSeconds ? 
+                `${String(timeInfo.minutes).padStart(2, '0')}:${String(timeInfo.seconds).padStart(2, '0')}.${String(Math.floor(timeInfo.milliseconds / 10)).padStart(2, '0')}` :
                 `${String(timeInfo.days).padStart(2, '0')}d${String(timeInfo.hours).padStart(2, '0')}h${String(timeInfo.minutes).padStart(2, '0')}m`
             }`;
         
@@ -46,6 +48,11 @@ function updateCountdownsOnly() {
             element.classList.remove('expired');
         }
     });
+    
+    // requestAnimationFrameで次フレームの更新をスケジュール
+    if (window.isCountdownAnimationActive) {
+        animationFrameId = requestAnimationFrame(updateCountdownsOnly);
+    }
 }
 let lastSyncTime = null;
 let notifiedTodos = new Set(); // 通知済みのTodoIDを記録
@@ -53,7 +60,6 @@ let preNotifiedTodos = new Set(); // 事前通知済みのTodoIDを記録
 let currentFilter = 'active'; // 現在のフィルター状態
 let userStats = null; // ユーザー統計情報
 let presets = []; // プリセット一覧
-let showRoutineTasks = false; // ルーティンタスクの表示フラグ
 let weeklyViewContainer;
 let scheduleContainer;
 
@@ -130,13 +136,17 @@ function init() {
             return Math.abs(diff) < 60000; // 残り1分以内または期限切れ1分以内
         });
         
-        if (hasNearDeadline && !window.fastUpdateInterval) {
-            // 100ミリ秒ごとにカウントダウンのみ更新
-            window.fastUpdateInterval = setInterval(updateCountdownsOnly, 100);
-        } else if (!hasNearDeadline && window.fastUpdateInterval) {
+        if (hasNearDeadline && !window.isCountdownAnimationActive) {
+            // requestAnimationFrame による滑らかなカウントダウン更新
+            window.isCountdownAnimationActive = true;
+            updateCountdownsOnly();
+        } else if (!hasNearDeadline && window.isCountdownAnimationActive) {
             // 高速更新を停止
-            clearInterval(window.fastUpdateInterval);
-            window.fastUpdateInterval = null;
+            window.isCountdownAnimationActive = false;
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
         }
     }, 1000); // 1秒ごとにチェック
     setupModalEvents();
@@ -506,7 +516,7 @@ function setupEditModalEvents() {
     
     // 削除ボタン
     deleteTodoBtn.addEventListener('click', async () => {
-        if (editingTodoId && confirm('このタスクを完全に削除しますか？')) {
+        if (editingTodoId && confirm('このタスクを削除しますか？')) {
             await deleteTodo(editingTodoId);
             closeEditModal();
         }
@@ -902,10 +912,10 @@ async function archiveTodo(id) {
     }
 }
 
-// Todo完全削除
+// Todoを削除（アーカイブ）
 async function deleteTodo(id) {
     try {
-        const response = await fetch(`/api/todos/${id}/permanent`, {
+        const response = await fetch(`/api/todos/${id}`, {
             method: 'DELETE'
         });
         
@@ -1183,10 +1193,6 @@ function renderTodos() {
     switch (currentFilter) {
         case 'active':
             filteredTodos = filteredTodos.filter(todo => !todo.archived);
-            // ルーティンタスクを除外するオプション
-            if (!showRoutineTasks) {
-                filteredTodos = filteredTodos.filter(todo => !todo.isRoutine);
-            }
             break;
         case 'today':
             filteredTodos = filteredTodos.filter(todo => {
@@ -1206,6 +1212,12 @@ function renderTodos() {
             break;
         case 'completed':
             filteredTodos = filteredTodos.filter(todo => todo.archived);
+            // 完了日時でソート（新しい順）
+            filteredTodos.sort((a, b) => {
+                const aDate = a.archivedAt ? new Date(a.archivedAt) : new Date();
+                const bDate = b.archivedAt ? new Date(b.archivedAt) : new Date();
+                return bDate - aDate;
+            });
             break;
     }
     
@@ -1227,20 +1239,74 @@ function renderTodos() {
         return a.deadline.getTime() - b.deadline.getTime();
     });
     
-    // アクティブタブの場合はルーティンタスクトグルを表示
-    let headerHtml = '';
-    if (currentFilter === 'active') {
-        headerHtml = `
-            <div class="routine-toggle-container">
-                <label class="routine-toggle">
-                    <input type="checkbox" id="routineToggle" ${showRoutineTasks ? 'checked' : ''}>
-                    <span>ルーティンタスクを表示</span>
-                </label>
-            </div>
-        `;
-    }
+    todoContainer.innerHTML = '';
     
-    todoContainer.innerHTML = headerHtml;
+    // 完了済みタブの場合は日付ごとにグループ化して表示
+    if (currentFilter === 'completed') {
+        // 日付ごとにグループ化
+        const groupedByDate = {};
+        filteredTodos.forEach(todo => {
+            const archivedDate = todo.archivedAt ? new Date(todo.archivedAt) : new Date();
+            const dateKey = archivedDate.toLocaleDateString('ja-JP');
+            if (!groupedByDate[dateKey]) {
+                groupedByDate[dateKey] = [];
+            }
+            groupedByDate[dateKey].push(todo);
+        });
+        
+        // 日付ごとに表示（新しい日付順にソート）
+        const sortedDates = Object.entries(groupedByDate).sort((a, b) => {
+            // 日付文字列を比較用のDateオブジェクトに変換
+            const dateA = new Date(a[0].replace(/\//g, '-'));
+            const dateB = new Date(b[0].replace(/\//g, '-'));
+            return dateB - dateA; // 新しい日付が先
+        });
+        
+        sortedDates.forEach(([dateKey, tasks]) => {
+            const section = document.createElement('div');
+            section.className = 'completed-date-section';
+            
+            const header = document.createElement('h3');
+            header.className = 'completed-date-header';
+            header.textContent = `${dateKey}（${tasks.length}件）`;
+            section.appendChild(header);
+            
+            const taskList = document.createElement('div');
+            taskList.className = 'completed-task-list';
+            
+            tasks.forEach(task => {
+                const completedTime = task.archivedAt ? new Date(task.archivedAt) : new Date();
+                const timeStr = `${String(completedTime.getHours()).padStart(2, '0')}:${String(completedTime.getMinutes()).padStart(2, '0')}`;
+                const originalDeadline = new Date(task.deadline);
+                const deadlineStr = `${String(originalDeadline.getHours()).padStart(2, '0')}:${String(originalDeadline.getMinutes()).padStart(2, '0')}`;
+                
+                const taskItem = document.createElement('div');
+                taskItem.className = 'completed-task-item';
+                taskItem.dataset.todoId = task.id;
+                taskItem.innerHTML = `
+                    <div class="completed-task-info">
+                        <span class="completed-check">✓</span>
+                        <span class="completed-task-title">${escapeHtml(task.title)}</span>
+                    </div>
+                    <div class="completed-task-times">
+                        <span class="deadline-time">期限: ${deadlineStr}</span>
+                        <span class="completed-time">完了: ${timeStr}</span>
+                    </div>
+                `;
+                
+                // クリックイベントを追加
+                taskItem.addEventListener('click', () => {
+                    openEditModal(task.id);
+                });
+                
+                taskList.appendChild(taskItem);
+            });
+            
+            section.appendChild(taskList);
+            todoContainer.appendChild(section);
+        });
+        return;
+    }
     
     // アニメーション中のタスクを最初に表示
     animatingTodos.forEach(todo => {
@@ -1299,8 +1365,8 @@ function renderTodos() {
             <!-- カウントダウン表示 -->
             <div class="countdown-display">
                 <div class="countdown-time ${timeInfo.expired ? 'expired' : ''}">
-                    ${timeInfo.expired && todo.animationPhase !== 'white' ? '+' : '-'}${timeInfo.showSeconds ? 
-                        `${String(timeInfo.minutes).padStart(2, '0')}:${String(timeInfo.seconds).padStart(2, '0')}.${String(Math.floor(timeInfo.milliseconds / 100))}` :
+                    ${timeInfo.expired && todo.animationPhase !== 'white' ? '-' : '+'}${timeInfo.showSeconds ? 
+                        `${String(timeInfo.minutes).padStart(2, '0')}:${String(timeInfo.seconds).padStart(2, '0')}.${String(Math.floor(timeInfo.milliseconds / 10)).padStart(2, '0')}` :
                         `${String(timeInfo.days).padStart(2, '0')}d${String(timeInfo.hours).padStart(2, '0')}h${String(timeInfo.minutes).padStart(2, '0')}m`
                     }
                 </div>
@@ -1413,8 +1479,8 @@ function renderTodos() {
                 <!-- カウントダウン表示 -->
                 <div class="countdown-display">
                     <div class="countdown-time ${timeInfo.expired ? 'expired' : ''}">
-                        ${timeInfo.expired ? '+' : '-'}${timeInfo.showSeconds ? 
-                            `${String(timeInfo.minutes).padStart(2, '0')}:${String(timeInfo.seconds).padStart(2, '0')}.${String(Math.floor(timeInfo.milliseconds / 100))}` :
+                        ${timeInfo.expired ? '-' : '+'}${timeInfo.showSeconds ? 
+                            `${String(timeInfo.minutes).padStart(2, '0')}:${String(timeInfo.seconds).padStart(2, '0')}.${String(Math.floor(timeInfo.milliseconds / 10)).padStart(2, '0')}` :
                             `${String(timeInfo.days).padStart(2, '0')}d${String(timeInfo.hours).padStart(2, '0')}h${String(timeInfo.minutes).padStart(2, '0')}m`
                         }
                     </div>
@@ -1434,16 +1500,6 @@ function renderTodos() {
         todoContainer.appendChild(todoCard);
     });
     
-    // ルーティンタスクトグルのイベントリスナー
-    if (currentFilter === 'active') {
-        const routineToggle = document.getElementById('routineToggle');
-        if (routineToggle) {
-            routineToggle.addEventListener('change', (e) => {
-                showRoutineTasks = e.target.checked;
-                renderTodos();
-            });
-        }
-    }
 }
 
 // カレンダーをセットアップ
@@ -1664,8 +1720,11 @@ window.addEventListener('beforeunload', () => {
     if (syncInterval) {
         clearInterval(syncInterval);
     }
-    if (window.fastUpdateInterval) {
-        clearInterval(window.fastUpdateInterval);
+    if (window.isCountdownAnimationActive) {
+        window.isCountdownAnimationActive = false;
+        if (animationFrameId) {
+            cancelAnimationFrame(animationFrameId);
+        }
     }
 });
 
