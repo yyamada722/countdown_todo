@@ -31,13 +31,18 @@ function updateCountdownsOnly() {
         );
         
         // カウントダウンのテキストのみを更新
+        // アニメーション中はミリ秒値が全体の値なので、正しく計算
+        const displayMillis = todo.isAnimating ? 
+            Math.floor((timeInfo.milliseconds % 1000) / 10) : 
+            Math.floor(timeInfo.milliseconds / 10);
+        
         element.textContent = timeInfo.expired && todo.animationPhase !== 'white' ? 
             `-${timeInfo.showSeconds ? 
-                `${String(timeInfo.minutes).padStart(2, '0')}:${String(timeInfo.seconds).padStart(2, '0')}.${String(Math.floor(timeInfo.milliseconds / 10)).padStart(2, '0')}` :
+                `${String(timeInfo.minutes).padStart(2, '0')}:${String(timeInfo.seconds).padStart(2, '0')}.${String(displayMillis).padStart(2, '0')}` :
                 `${String(timeInfo.days).padStart(2, '0')}d${String(timeInfo.hours).padStart(2, '0')}h${String(timeInfo.minutes).padStart(2, '0')}m`
             }` :
             `+${timeInfo.showSeconds ? 
-                `${String(timeInfo.minutes).padStart(2, '0')}:${String(timeInfo.seconds).padStart(2, '0')}.${String(Math.floor(timeInfo.milliseconds / 10)).padStart(2, '0')}` :
+                `${String(timeInfo.minutes).padStart(2, '0')}:${String(timeInfo.seconds).padStart(2, '0')}.${String(displayMillis).padStart(2, '0')}` :
                 `${String(timeInfo.days).padStart(2, '0')}d${String(timeInfo.hours).padStart(2, '0')}h${String(timeInfo.minutes).padStart(2, '0')}m`
             }`;
         
@@ -1008,9 +1013,11 @@ function formatTimeRemaining(deadline, startType, startedAt, isAnimating, animat
         // アニメーション中は実際の時間変化を反映したミリ秒を使用
         let milliseconds;
         if (isAnimating && animationPhase !== 'white') {
-            // アニメーション中は overdue の小数部分も含めて計算
-            const fractionalSeconds = (overdue % 1000);
-            milliseconds = Math.floor(fractionalSeconds);
+            // アニメーション中はoverdueの値全体を使用
+            milliseconds = overdue;
+        } else if (isAnimating && animationPhase === 'white') {
+            // 白背景フェーズでも滑らかなアニメーション
+            milliseconds = overdue;
         } else {
             // 通常時は現在時刻のミリ秒を使用
             milliseconds = now.getMilliseconds();
@@ -1042,9 +1049,8 @@ function formatTimeRemaining(deadline, startType, startedAt, isAnimating, animat
     // アニメーション中は実際の時間変化を反映したミリ秒を使用
     let milliseconds;
     if (isAnimating) {
-        // アニメーション中は diff の小数部分も含めて計算
-        const fractionalSeconds = (diff % 1000);
-        milliseconds = Math.floor(fractionalSeconds);
+        // アニメーション中はdiffの値全体を使用
+        milliseconds = Math.abs(diff);
     } else {
         // 通常時は現在時刻のミリ秒を使用
         milliseconds = now.getMilliseconds();
@@ -1408,7 +1414,7 @@ function renderTodos() {
             <div class="countdown-display">
                 <div class="countdown-time ${timeInfo.expired ? 'expired' : ''}">
                     ${timeInfo.expired && todo.animationPhase !== 'white' ? '-' : '+'}${timeInfo.showSeconds ? 
-                        `${String(timeInfo.minutes).padStart(2, '0')}:${String(timeInfo.seconds).padStart(2, '0')}.${String(Math.floor(timeInfo.milliseconds / 10)).padStart(2, '0')}` :
+                        `${String(timeInfo.minutes).padStart(2, '0')}:${String(timeInfo.seconds).padStart(2, '0')}.${String(Math.floor((todo.isAnimating ? timeInfo.milliseconds % 1000 : timeInfo.milliseconds) / 10)).padStart(2, '0')}` :
                         `${String(timeInfo.days).padStart(2, '0')}d${String(timeInfo.hours).padStart(2, '0')}h${String(timeInfo.minutes).padStart(2, '0')}m`
                     }
                 </div>
@@ -1522,7 +1528,7 @@ function renderTodos() {
                 <div class="countdown-display">
                     <div class="countdown-time ${timeInfo.expired ? 'expired' : ''}">
                         ${timeInfo.expired ? '-' : '+'}${timeInfo.showSeconds ? 
-                            `${String(timeInfo.minutes).padStart(2, '0')}:${String(timeInfo.seconds).padStart(2, '0')}.${String(Math.floor(timeInfo.milliseconds / 10)).padStart(2, '0')}` :
+                            `${String(timeInfo.minutes).padStart(2, '0')}:${String(timeInfo.seconds).padStart(2, '0')}.${String(Math.floor((todo.isAnimating ? timeInfo.milliseconds % 1000 : timeInfo.milliseconds) / 10)).padStart(2, '0')}` :
                             `${String(timeInfo.days).padStart(2, '0')}d${String(timeInfo.hours).padStart(2, '0')}h${String(timeInfo.minutes).padStart(2, '0')}m`
                         }
                     </div>
