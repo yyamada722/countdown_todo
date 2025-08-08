@@ -10,14 +10,17 @@ let animationFrameId = null;
 function updateCountdownsOnly() {
     const countdownElements = document.querySelectorAll('.todo-card .countdown-time');
     
+    
     countdownElements.forEach(element => {
         const todoCard = element.closest('.todo-card');
         const todoId = todoCard?.dataset.todoId;
         
         if (!todoId) return;
         
-        const todo = todos.find(t => t.id === parseInt(todoId));
+        // アニメーション中のタスクのIDは文字列なので、parseIntではなく直接比較
+        const todo = todos.find(t => t.id == todoId || t.id === parseInt(todoId));
         if (!todo || todo.archived) return;
+        
         
         const timeInfo = formatTimeRemaining(
             todo.deadline, 
@@ -130,8 +133,6 @@ function init() {
     
     startClock();
     setInterval(() => {
-        renderTodos();
-        
         // 1分以内のタスクまたはアニメーション中のタスクがある場合は高速更新
         const hasNearDeadline = todos.some(todo => {
             if (todo.archived) return false;
@@ -140,6 +141,11 @@ function init() {
             const diff = todo.deadline.getTime() - now.getTime();
             return Math.abs(diff) < 60000; // 残り1分以内または期限切れ1分以内
         });
+        
+        // アニメーション中でない場合のみrenderTodosを呼ぶ
+        if (!hasNearDeadline) {
+            renderTodos();
+        }
         
         if (hasNearDeadline && !window.isCountdownAnimationActive) {
             // requestAnimationFrame による滑らかなカウントダウン更新
@@ -152,6 +158,8 @@ function init() {
                 cancelAnimationFrame(animationFrameId);
                 animationFrameId = null;
             }
+            // 高速更新停止時は一度renderTodosを呼ぶ
+            renderTodos();
         }
     }, 1000); // 1秒ごとにチェック
     setupModalEvents();
