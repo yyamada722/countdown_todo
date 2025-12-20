@@ -341,7 +341,7 @@ async function handleAPI(req, res, pathname) {
     
     // PUT /api/presets/:id - プリセットを更新
     if (method === 'PUT' && pathname.startsWith('/api/presets/')) {
-        const presetId = parseInt(pathname.split('/')[3]);
+        const presetId = parseFloat(pathname.split('/')[3]);
         
         try {
             const updates = await parseRequestBody(req);
@@ -375,7 +375,7 @@ async function handleAPI(req, res, pathname) {
     
     // DELETE /api/presets/:id - プリセットを削除
     if (method === 'DELETE' && pathname.startsWith('/api/presets/')) {
-        const presetId = parseInt(pathname.split('/')[3]);
+        const presetId = parseFloat(pathname.split('/')[3]);
         const data = readDatabase();
         
         const index = data.presets.findIndex(preset => preset.id === presetId);
@@ -398,7 +398,7 @@ async function handleAPI(req, res, pathname) {
     
     // POST /api/presets/:id/apply - プリセットを今日に適用
     if (method === 'POST' && pathname.match(/^\/api\/presets\/\d+\/apply$/)) {
-        const presetId = parseInt(pathname.split('/')[3]);
+        const presetId = parseFloat(pathname.split('/')[3]);
         
         try {
             // リクエストボディを取得
@@ -510,7 +510,7 @@ async function handleAPI(req, res, pathname) {
     
     // PUT /api/schedules/:id - スケジュールを更新
     if (method === 'PUT' && pathname.match(/^\/api\/schedules\/\d+$/)) {
-        const scheduleId = parseInt(pathname.split('/')[3]);
+        const scheduleId = parseFloat(pathname.split('/')[3]);
         
         try {
             const updates = await parseRequestBody(req);
@@ -545,7 +545,7 @@ async function handleAPI(req, res, pathname) {
     
     // DELETE /api/schedules/:id - スケジュールを削除
     if (method === 'DELETE' && pathname.match(/^\/api\/schedules\/\d+$/)) {
-        const scheduleId = parseInt(pathname.split('/')[3]);
+        const scheduleId = parseFloat(pathname.split('/')[3]);
         const data = readDatabase();
         
         const index = data.schedules.findIndex(schedule => schedule.id === scheduleId);
