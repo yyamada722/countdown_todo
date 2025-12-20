@@ -28,7 +28,10 @@
         <!-- 時刻表示 -->
         <div class="clock-container">
             <div class="clock-time" id="currentTime">00:00:00</div>
-            <div class="clock-date" id="currentDate">0000/00/00 (月)</div>
+            <div class="clock-date-weather">
+                <span class="clock-date" id="currentDate">0000/00/00 (月)</span>
+                <span class="weather-display" id="weatherDisplay" title="クリックして場所を設定"></span>
+            </div>
         </div>
 
         <!-- フィルタータブ -->
@@ -278,7 +281,47 @@
     
     <!-- 通知ポップアップ -->
     <div class="notification-container" id="notificationContainer"></div>
-    
+
+    <!-- 天気設定モーダル -->
+    <div class="modal-overlay" id="weatherModalOverlay">
+        <div class="modal weather-modal">
+            <div class="modal-header">
+                <h2>天気予報の設定</h2>
+                <button class="modal-close" id="closeWeatherModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-field">
+                    <label for="weatherLocation">場所の名前</label>
+                    <input type="text" id="weatherLocation" placeholder="例: 東京" class="modal-input">
+                </div>
+                <div class="form-field">
+                    <label>緯度・経度</label>
+                    <div class="location-inputs">
+                        <input type="number" id="weatherLat" placeholder="緯度 (例: 35.6762)" class="modal-input location-input" step="0.0001">
+                        <input type="number" id="weatherLon" placeholder="経度 (例: 139.6503)" class="modal-input location-input" step="0.0001">
+                    </div>
+                    <small class="help-text">Google Mapsなどで座標を確認できます</small>
+                </div>
+                <div class="form-field">
+                    <label>よく使う場所</label>
+                    <div class="preset-locations">
+                        <button type="button" class="preset-location-btn" data-lat="35.6762" data-lon="139.6503" data-name="東京">東京</button>
+                        <button type="button" class="preset-location-btn" data-lat="34.6937" data-lon="135.5023" data-name="大阪">大阪</button>
+                        <button type="button" class="preset-location-btn" data-lat="35.1815" data-lon="136.9066" data-name="名古屋">名古屋</button>
+                        <button type="button" class="preset-location-btn" data-lat="43.0618" data-lon="141.3545" data-name="札幌">札幌</button>
+                        <button type="button" class="preset-location-btn" data-lat="33.5904" data-lon="130.4017" data-name="福岡">福岡</button>
+                    </div>
+                </div>
+                <button type="button" class="btn-geolocation" id="useGeolocation">現在地を使用</button>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-cancel" id="cancelWeatherModal">キャンセル</button>
+                <button class="btn-weather-clear" id="clearWeatherSettings">設定を削除</button>
+                <button class="btn-create" id="saveWeatherSettings">保存</button>
+            </div>
+        </div>
+    </div>
+
     <script src="script.js"></script>
 </body>
 </html>

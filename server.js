@@ -163,7 +163,7 @@ async function handleAPI(req, res, pathname) {
     // PUT /api/todos/:id - Todoを更新
     if (method === 'PUT' && pathname.startsWith('/api/todos/')) {
         try {
-            const todoId = parseInt(pathname.split('/')[3]);
+            const todoId = parseFloat(pathname.split('/')[3]);
             const updateData = await parseRequestBody(req);
             const data = readDatabase();
             
@@ -189,32 +189,10 @@ async function handleAPI(req, res, pathname) {
         return;
     }
     
-    // DELETE /api/todos/:id/permanent - Todoを完全に削除（先にチェック）
-    if (method === 'DELETE' && pathname.match(/^\/api\/todos\/\d+\/permanent$/)) {
-        const todoId = parseInt(pathname.split('/')[3]);
-        const data = readDatabase();
-        
-        const index = data.todos.findIndex(todo => todo.id === todoId);
-        if (index !== -1) {
-            data.todos.splice(index, 1);
-            
-            if (writeDatabase(data)) {
-                res.writeHead(204);
-                res.end();
-            } else {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'Failed to delete todo permanently' }));
-            }
-        } else {
-            res.writeHead(404, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Todo not found' }));
-        }
-        return;
-    }
     
     // DELETE /api/todos/:id - Todoを削除（アーカイブに変更）
     if (method === 'DELETE' && pathname.startsWith('/api/todos/')) {
-        const todoId = parseInt(pathname.split('/')[3]);
+        const todoId = parseFloat(pathname.split('/')[3]);
         const data = readDatabase();
         
         const index = data.todos.findIndex(todo => todo.id === todoId);
@@ -363,7 +341,7 @@ async function handleAPI(req, res, pathname) {
     
     // PUT /api/presets/:id - プリセットを更新
     if (method === 'PUT' && pathname.startsWith('/api/presets/')) {
-        const presetId = parseInt(pathname.split('/')[3]);
+        const presetId = parseFloat(pathname.split('/')[3]);
         
         try {
             const updates = await parseRequestBody(req);
@@ -397,7 +375,7 @@ async function handleAPI(req, res, pathname) {
     
     // DELETE /api/presets/:id - プリセットを削除
     if (method === 'DELETE' && pathname.startsWith('/api/presets/')) {
-        const presetId = parseInt(pathname.split('/')[3]);
+        const presetId = parseFloat(pathname.split('/')[3]);
         const data = readDatabase();
         
         const index = data.presets.findIndex(preset => preset.id === presetId);
@@ -420,7 +398,7 @@ async function handleAPI(req, res, pathname) {
     
     // POST /api/presets/:id/apply - プリセットを今日に適用
     if (method === 'POST' && pathname.match(/^\/api\/presets\/\d+\/apply$/)) {
-        const presetId = parseInt(pathname.split('/')[3]);
+        const presetId = parseFloat(pathname.split('/')[3]);
         
         try {
             // リクエストボディを取得
@@ -466,9 +444,7 @@ async function handleAPI(req, res, pathname) {
                     title: task.title,
                     deadline: deadline.toISOString(),
                     createdAt: new Date().toISOString(),
-                    archived: false,
-                    isRoutine: true,
-                    presetId: presetId
+                    archived: false
                 };
                 
                 data.todos.push(newTodo);
@@ -534,7 +510,7 @@ async function handleAPI(req, res, pathname) {
     
     // PUT /api/schedules/:id - スケジュールを更新
     if (method === 'PUT' && pathname.match(/^\/api\/schedules\/\d+$/)) {
-        const scheduleId = parseInt(pathname.split('/')[3]);
+        const scheduleId = parseFloat(pathname.split('/')[3]);
         
         try {
             const updates = await parseRequestBody(req);
@@ -569,7 +545,7 @@ async function handleAPI(req, res, pathname) {
     
     // DELETE /api/schedules/:id - スケジュールを削除
     if (method === 'DELETE' && pathname.match(/^\/api\/schedules\/\d+$/)) {
-        const scheduleId = parseInt(pathname.split('/')[3]);
+        const scheduleId = parseFloat(pathname.split('/')[3]);
         const data = readDatabase();
         
         const index = data.schedules.findIndex(schedule => schedule.id === scheduleId);

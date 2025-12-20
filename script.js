@@ -4,9 +4,17 @@ let clockInterval;
 let syncInterval;
 let schedules = []; // スケジュール（繰り返しタスク）の配列
 
+// 天気関連のグローバル変数
+let weatherSettings = null;
+let weatherData = null;
+let weatherLastFetched = null;
+
 // カウントダウンのみを更新する関数
+let animationFrameId = null;
+
 function updateCountdownsOnly() {
     const countdownElements = document.querySelectorAll('.todo-card .countdown-time');
+    
     
     countdownElements.forEach(element => {
         const todoCard = element.closest('.todo-card');
@@ -14,8 +22,10 @@ function updateCountdownsOnly() {
         
         if (!todoId) return;
         
-        const todo = todos.find(t => t.id === parseInt(todoId));
+        // アニメーション中のタスクのIDは文字列なので、parseIntではなく直接比較
+        const todo = todos.find(t => t.id == todoId || t.id === parseInt(todoId));
         if (!todo || todo.archived) return;
+        
         
         const timeInfo = formatTimeRemaining(
             todo.deadline, 
@@ -29,13 +39,18 @@ function updateCountdownsOnly() {
         );
         
         // カウントダウンのテキストのみを更新
+        // アニメーション中はミリ秒値が全体の値なので、正しく計算
+        const displayMillis = todo.isAnimating ? 
+            Math.floor((timeInfo.milliseconds % 1000) / 10) : 
+            Math.floor(timeInfo.milliseconds / 10);
+        
         element.textContent = timeInfo.expired && todo.animationPhase !== 'white' ? 
-            `+${timeInfo.showSeconds ? 
-                `${String(timeInfo.minutes).padStart(2, '0')}:${String(timeInfo.seconds).padStart(2, '0')}.${String(Math.floor(timeInfo.milliseconds / 100))}` :
+            `-${timeInfo.showSeconds ? 
+                `${String(timeInfo.minutes).padStart(2, '0')}:${String(timeInfo.seconds).padStart(2, '0')}.${String(displayMillis).padStart(2, '0')}` :
                 `${String(timeInfo.days).padStart(2, '0')}d${String(timeInfo.hours).padStart(2, '0')}h${String(timeInfo.minutes).padStart(2, '0')}m`
             }` :
-            `-${timeInfo.showSeconds ? 
-                `${String(timeInfo.minutes).padStart(2, '0')}:${String(timeInfo.seconds).padStart(2, '0')}.${String(Math.floor(timeInfo.milliseconds / 100))}` :
+            `+${timeInfo.showSeconds ? 
+                `${String(timeInfo.minutes).padStart(2, '0')}:${String(timeInfo.seconds).padStart(2, '0')}.${String(displayMillis).padStart(2, '0')}` :
                 `${String(timeInfo.days).padStart(2, '0')}d${String(timeInfo.hours).padStart(2, '0')}h${String(timeInfo.minutes).padStart(2, '0')}m`
             }`;
         
@@ -46,6 +61,11 @@ function updateCountdownsOnly() {
             element.classList.remove('expired');
         }
     });
+    
+    // requestAnimationFrameで次フレームの更新をスケジュール
+    if (window.isCountdownAnimationActive) {
+        animationFrameId = requestAnimationFrame(updateCountdownsOnly);
+    }
 }
 let lastSyncTime = null;
 let notifiedTodos = new Set(); // 通知済みのTodoIDを記録
@@ -53,7 +73,6 @@ let preNotifiedTodos = new Set(); // 事前通知済みのTodoIDを記録
 let currentFilter = 'active'; // 現在のフィルター状態
 let userStats = null; // ユーザー統計情報
 let presets = []; // プリセット一覧
-let showRoutineTasks = false; // ルーティンタスクの表示フラグ
 let weeklyViewContainer;
 let scheduleContainer;
 
@@ -119,8 +138,6 @@ function init() {
     
     startClock();
     setInterval(() => {
-        renderTodos();
-        
         // 1分以内のタスクまたはアニメーション中のタスクがある場合は高速更新
         const hasNearDeadline = todos.some(todo => {
             if (todo.archived) return false;
@@ -130,13 +147,24 @@ function init() {
             return Math.abs(diff) < 60000; // 残り1分以内または期限切れ1分以内
         });
         
-        if (hasNearDeadline && !window.fastUpdateInterval) {
-            // 100ミリ秒ごとにカウントダウンのみ更新
-            window.fastUpdateInterval = setInterval(updateCountdownsOnly, 100);
-        } else if (!hasNearDeadline && window.fastUpdateInterval) {
+        // アニメーション中でない場合のみrenderTodosを呼ぶ
+        if (!hasNearDeadline) {
+            renderTodos();
+        }
+        
+        if (hasNearDeadline && !window.isCountdownAnimationActive) {
+            // requestAnimationFrame による滑らかなカウントダウン更新
+            window.isCountdownAnimationActive = true;
+            updateCountdownsOnly();
+        } else if (!hasNearDeadline && window.isCountdownAnimationActive) {
             // 高速更新を停止
-            clearInterval(window.fastUpdateInterval);
-            window.fastUpdateInterval = null;
+            window.isCountdownAnimationActive = false;
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            // 高速更新停止時は一度renderTodosを呼ぶ
+            renderTodos();
         }
     }, 1000); // 1秒ごとにチェック
     setupModalEvents();
@@ -148,12 +176,15 @@ function init() {
     
     // 同期状態表示を追加
     addSyncIndicator();
-    
+
     // ゲーミフィケーション表示を追加（削除）
     // addGameStats();
-    
+
     // 通知許可状態を更新
     updateNotificationButtonState();
+
+    // 天気機能を初期化
+    initWeather();
 }
 
 // ユーザー統計を読み込む
@@ -506,7 +537,7 @@ function setupEditModalEvents() {
     
     // 削除ボタン
     deleteTodoBtn.addEventListener('click', async () => {
-        if (editingTodoId && confirm('このタスクを完全に削除しますか？')) {
+        if (editingTodoId && confirm('このタスクを削除しますか？')) {
             await deleteTodo(editingTodoId);
             closeEditModal();
         }
@@ -764,22 +795,44 @@ async function completeTodo(id) {
             return;
         }
         
-        // 3秒後に白背景にして、さらに3秒後に削除
-        setTimeout(() => {
+        // アニメーションフェーズの管理
+        const checkAnimationPhase = () => {
             const animTodo = todos.find(t => t.id === animatingTodo.id);
-            if (animTodo) {
+            if (!animTodo) return;
+            
+            const elapsed = Date.now() - animTodo.animationStartTime;
+            
+            if (elapsed >= 3000 && !animTodo.animationPhase) {
+                // 3秒経過後、白背景フェーズへ
                 animTodo.animationPhase = 'white';
-                animTodo.animationStartTime = new Date().getTime();
+                animTodo.animationStartTime = Date.now();
                 playTimeChime(); // 0秒になった時に時報を再生
                 renderTodos();
+                
+                // 白背景フェーズの終了をチェック
+                setTimeout(() => {
+                    const checkWhitePhase = () => {
+                        const animTodo = todos.find(t => t.id === animatingTodo.id);
+                        if (!animTodo) return;
+                        
+                        const whiteElapsed = Date.now() - animTodo.animationStartTime;
+                        if (whiteElapsed >= 3000) {
+                            // アニメーション用タスクを削除
+                            todos = todos.filter(t => t.id !== animatingTodo.id);
+                            renderTodos();
+                        } else {
+                            requestAnimationFrame(checkWhitePhase);
+                        }
+                    };
+                    checkWhitePhase();
+                }, 100);
+            } else if (!animTodo.animationPhase) {
+                requestAnimationFrame(checkAnimationPhase);
             }
-            
-            setTimeout(() => {
-                // アニメーション用タスクを削除
-                todos = todos.filter(t => t.id !== animatingTodo.id);
-                renderTodos();
-            }, 3000);
-        }, 3000);
+        };
+        
+        // アニメーションフェーズのチェックを開始
+        requestAnimationFrame(checkAnimationPhase);
     } else {
         // 通常の完了処理
         if (todo.repeat) {
@@ -902,10 +955,10 @@ async function archiveTodo(id) {
     }
 }
 
-// Todo完全削除
+// Todoを削除（アーカイブ）
 async function deleteTodo(id) {
     try {
-        const response = await fetch(`/api/todos/${id}/permanent`, {
+        const response = await fetch(`/api/todos/${id}`, {
             method: 'DELETE'
         });
         
@@ -972,7 +1025,19 @@ function formatTimeRemaining(deadline, startType, startedAt, isAnimating, animat
         const hours = Math.floor((overdue % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
         const minutes = Math.floor((overdue % (1000 * 60 * 60)) / (1000 * 60));
         const seconds = Math.floor((overdue % (1000 * 60)) / 1000);
-        const milliseconds = Math.floor(overdue % 1000);
+        
+        // アニメーション中は実際の時間変化を反映したミリ秒を使用
+        let milliseconds;
+        if (isAnimating && animationPhase !== 'white') {
+            // アニメーション中はoverdueの値全体を使用
+            milliseconds = overdue;
+        } else if (isAnimating && animationPhase === 'white') {
+            // 白背景フェーズでも滑らかなアニメーション
+            milliseconds = overdue;
+        } else {
+            // 通常時は現在時刻のミリ秒を使用
+            milliseconds = now.getMilliseconds();
+        }
         
         // 期限切れでも1分以内またはアニメーション中の場合は秒数表示
         const showSeconds = (overdue < 60000) || isAnimating;
@@ -996,7 +1061,16 @@ function formatTimeRemaining(deadline, startType, startedAt, isAnimating, animat
     const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
     const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-    const milliseconds = Math.floor(diff % 1000);
+    
+    // アニメーション中は実際の時間変化を反映したミリ秒を使用
+    let milliseconds;
+    if (isAnimating) {
+        // アニメーション中はdiffの値全体を使用
+        milliseconds = Math.abs(diff);
+    } else {
+        // 通常時は現在時刻のミリ秒を使用
+        milliseconds = now.getMilliseconds();
+    }
     
     // 1分以内またはアニメーション中の場合は秒数も表示
     const showSeconds = (diff < 60000) || isAnimating;
@@ -1183,10 +1257,6 @@ function renderTodos() {
     switch (currentFilter) {
         case 'active':
             filteredTodos = filteredTodos.filter(todo => !todo.archived);
-            // ルーティンタスクを除外するオプション
-            if (!showRoutineTasks) {
-                filteredTodos = filteredTodos.filter(todo => !todo.isRoutine);
-            }
             break;
         case 'today':
             filteredTodos = filteredTodos.filter(todo => {
@@ -1206,6 +1276,12 @@ function renderTodos() {
             break;
         case 'completed':
             filteredTodos = filteredTodos.filter(todo => todo.archived);
+            // 完了日時でソート（新しい順）
+            filteredTodos.sort((a, b) => {
+                const aDate = a.archivedAt ? new Date(a.archivedAt) : new Date();
+                const bDate = b.archivedAt ? new Date(b.archivedAt) : new Date();
+                return bDate - aDate;
+            });
             break;
     }
     
@@ -1227,20 +1303,74 @@ function renderTodos() {
         return a.deadline.getTime() - b.deadline.getTime();
     });
     
-    // アクティブタブの場合はルーティンタスクトグルを表示
-    let headerHtml = '';
-    if (currentFilter === 'active') {
-        headerHtml = `
-            <div class="routine-toggle-container">
-                <label class="routine-toggle">
-                    <input type="checkbox" id="routineToggle" ${showRoutineTasks ? 'checked' : ''}>
-                    <span>ルーティンタスクを表示</span>
-                </label>
-            </div>
-        `;
-    }
+    todoContainer.innerHTML = '';
     
-    todoContainer.innerHTML = headerHtml;
+    // 完了済みタブの場合は日付ごとにグループ化して表示
+    if (currentFilter === 'completed') {
+        // 日付ごとにグループ化
+        const groupedByDate = {};
+        filteredTodos.forEach(todo => {
+            const archivedDate = todo.archivedAt ? new Date(todo.archivedAt) : new Date();
+            const dateKey = archivedDate.toLocaleDateString('ja-JP');
+            if (!groupedByDate[dateKey]) {
+                groupedByDate[dateKey] = [];
+            }
+            groupedByDate[dateKey].push(todo);
+        });
+        
+        // 日付ごとに表示（新しい日付順にソート）
+        const sortedDates = Object.entries(groupedByDate).sort((a, b) => {
+            // 日付文字列を比較用のDateオブジェクトに変換
+            const dateA = new Date(a[0].replace(/\//g, '-'));
+            const dateB = new Date(b[0].replace(/\//g, '-'));
+            return dateB - dateA; // 新しい日付が先
+        });
+        
+        sortedDates.forEach(([dateKey, tasks]) => {
+            const section = document.createElement('div');
+            section.className = 'completed-date-section';
+            
+            const header = document.createElement('h3');
+            header.className = 'completed-date-header';
+            header.textContent = `${dateKey}（${tasks.length}件）`;
+            section.appendChild(header);
+            
+            const taskList = document.createElement('div');
+            taskList.className = 'completed-task-list';
+            
+            tasks.forEach(task => {
+                const completedTime = task.archivedAt ? new Date(task.archivedAt) : new Date();
+                const timeStr = `${String(completedTime.getHours()).padStart(2, '0')}:${String(completedTime.getMinutes()).padStart(2, '0')}`;
+                const originalDeadline = new Date(task.deadline);
+                const deadlineStr = `${String(originalDeadline.getHours()).padStart(2, '0')}:${String(originalDeadline.getMinutes()).padStart(2, '0')}`;
+                
+                const taskItem = document.createElement('div');
+                taskItem.className = 'completed-task-item';
+                taskItem.dataset.todoId = task.id;
+                taskItem.innerHTML = `
+                    <div class="completed-task-info">
+                        <span class="completed-check">✓</span>
+                        <span class="completed-task-title">${escapeHtml(task.title)}</span>
+                    </div>
+                    <div class="completed-task-times">
+                        <span class="deadline-time">期限: ${deadlineStr}</span>
+                        <span class="completed-time">完了: ${timeStr}</span>
+                    </div>
+                `;
+                
+                // クリックイベントを追加
+                taskItem.addEventListener('click', () => {
+                    openEditModal(task.id);
+                });
+                
+                taskList.appendChild(taskItem);
+            });
+            
+            section.appendChild(taskList);
+            todoContainer.appendChild(section);
+        });
+        return;
+    }
     
     // アニメーション中のタスクを最初に表示
     animatingTodos.forEach(todo => {
@@ -1299,8 +1429,8 @@ function renderTodos() {
             <!-- カウントダウン表示 -->
             <div class="countdown-display">
                 <div class="countdown-time ${timeInfo.expired ? 'expired' : ''}">
-                    ${timeInfo.expired && todo.animationPhase !== 'white' ? '+' : '-'}${timeInfo.showSeconds ? 
-                        `${String(timeInfo.minutes).padStart(2, '0')}:${String(timeInfo.seconds).padStart(2, '0')}.${String(Math.floor(timeInfo.milliseconds / 100))}` :
+                    ${timeInfo.expired && todo.animationPhase !== 'white' ? '-' : '+'}${timeInfo.showSeconds ? 
+                        `${String(timeInfo.minutes).padStart(2, '0')}:${String(timeInfo.seconds).padStart(2, '0')}.${String(Math.floor((todo.isAnimating ? timeInfo.milliseconds % 1000 : timeInfo.milliseconds) / 10)).padStart(2, '0')}` :
                         `${String(timeInfo.days).padStart(2, '0')}d${String(timeInfo.hours).padStart(2, '0')}h${String(timeInfo.minutes).padStart(2, '0')}m`
                     }
                 </div>
@@ -1413,8 +1543,8 @@ function renderTodos() {
                 <!-- カウントダウン表示 -->
                 <div class="countdown-display">
                     <div class="countdown-time ${timeInfo.expired ? 'expired' : ''}">
-                        ${timeInfo.expired ? '+' : '-'}${timeInfo.showSeconds ? 
-                            `${String(timeInfo.minutes).padStart(2, '0')}:${String(timeInfo.seconds).padStart(2, '0')}.${String(Math.floor(timeInfo.milliseconds / 100))}` :
+                        ${timeInfo.expired ? '-' : '+'}${timeInfo.showSeconds ? 
+                            `${String(timeInfo.minutes).padStart(2, '0')}:${String(timeInfo.seconds).padStart(2, '0')}.${String(Math.floor((todo.isAnimating ? timeInfo.milliseconds % 1000 : timeInfo.milliseconds) / 10)).padStart(2, '0')}` :
                             `${String(timeInfo.days).padStart(2, '0')}d${String(timeInfo.hours).padStart(2, '0')}h${String(timeInfo.minutes).padStart(2, '0')}m`
                         }
                     </div>
@@ -1434,16 +1564,6 @@ function renderTodos() {
         todoContainer.appendChild(todoCard);
     });
     
-    // ルーティンタスクトグルのイベントリスナー
-    if (currentFilter === 'active') {
-        const routineToggle = document.getElementById('routineToggle');
-        if (routineToggle) {
-            routineToggle.addEventListener('change', (e) => {
-                showRoutineTasks = e.target.checked;
-                renderTodos();
-            });
-        }
-    }
 }
 
 // カレンダーをセットアップ
@@ -1664,8 +1784,11 @@ window.addEventListener('beforeunload', () => {
     if (syncInterval) {
         clearInterval(syncInterval);
     }
-    if (window.fastUpdateInterval) {
-        clearInterval(window.fastUpdateInterval);
+    if (window.isCountdownAnimationActive) {
+        window.isCountdownAnimationActive = false;
+        if (animationFrameId) {
+            cancelAnimationFrame(animationFrameId);
+        }
     }
 });
 
@@ -1911,6 +2034,19 @@ function renderStats() {
         thisWeek: upcomingWeekTasks - todayTasks - tomorrowTasks,
         later: activeTasks - overdueTasks - upcomingWeekTasks
     };
+
+    // 最古のタスクからの経過日数
+    let oldestTaskDays = 0;
+    if (activeTasks > 0) {
+        const activeTodosWithCreatedAt = todos.filter(t => !t.archived && t.createdAt);
+        if (activeTodosWithCreatedAt.length > 0) {
+            const oldestTask = activeTodosWithCreatedAt.reduce((oldest, current) => {
+                return new Date(current.createdAt) < new Date(oldest.createdAt) ? current : oldest;
+            });
+            const oldestDate = new Date(oldestTask.createdAt);
+            oldestTaskDays = Math.floor((now - oldestDate) / (1000 * 60 * 60 * 24));
+        }
+    }
     
     // タスク分析
     const taskAnalysis = analyzeTaskNames(todos);
@@ -2190,6 +2326,12 @@ function renderStats() {
                         <span class="stat-label">完了率:</span>
                         <span class="stat-value">${completionRate}%</span>
                     </div>
+                    ${oldestTaskDays > 0 ? `
+                    <div class="stat-item">
+                        <span class="stat-label">最古のタスク:</span>
+                        <span class="stat-value">${oldestTaskDays}日前</span>
+                    </div>
+                    ` : ''}
                 </div>
             </div>
             
@@ -4192,3 +4334,308 @@ window.deleteSchedule = deleteSchedule;
 window.batchCreateTasks = batchCreateTasks;
 window.openScheduleModal = openScheduleModal;
 window.applyPreset = applyPreset;
+
+// =====================
+// 天気機能
+// =====================
+
+// 天気コードからアイコンと説明へのマッピング（ドット絵風）
+const weatherCodeMap = {
+    0: { icon: 'sunny', desc: '快晴' },
+    1: { icon: 'sunny', desc: '晴れ' },
+    2: { icon: 'cloudy-sun', desc: '曇り時々晴れ' },
+    3: { icon: 'cloudy', desc: '曇り' },
+    45: { icon: 'fog', desc: '霧' },
+    48: { icon: 'fog', desc: '霧氷' },
+    51: { icon: 'rainy', desc: '霧雨' },
+    53: { icon: 'rainy', desc: '霧雨' },
+    55: { icon: 'rainy', desc: '霧雨' },
+    56: { icon: 'rainy', desc: '凍結霧雨' },
+    57: { icon: 'rainy', desc: '凍結霧雨' },
+    61: { icon: 'rainy', desc: '小雨' },
+    63: { icon: 'rainy', desc: '雨' },
+    65: { icon: 'rainy-heavy', desc: '大雨' },
+    66: { icon: 'rainy', desc: '凍結雨' },
+    67: { icon: 'rainy', desc: '凍結雨' },
+    71: { icon: 'snowy', desc: '小雪' },
+    73: { icon: 'snowy', desc: '雪' },
+    75: { icon: 'snowy', desc: '大雪' },
+    77: { icon: 'snowy', desc: '霧雪' },
+    80: { icon: 'rainy', desc: 'にわか雨' },
+    81: { icon: 'rainy', desc: 'にわか雨' },
+    82: { icon: 'rainy-heavy', desc: '激しいにわか雨' },
+    85: { icon: 'snowy', desc: 'にわか雪' },
+    86: { icon: 'snowy', desc: 'にわか雪' },
+    95: { icon: 'thunder', desc: '雷雨' },
+    96: { icon: 'thunder', desc: '雷雨（雹）' },
+    99: { icon: 'thunder', desc: '雷雨（大粒雹）' }
+};
+
+// 天気機能を初期化
+function initWeather() {
+    // DOM要素を取得
+    const weatherDisplay = document.getElementById('weatherDisplay');
+    const weatherModalOverlay = document.getElementById('weatherModalOverlay');
+    const closeWeatherModalBtn = document.getElementById('closeWeatherModal');
+    const cancelWeatherModalBtn = document.getElementById('cancelWeatherModal');
+    const saveWeatherSettingsBtn = document.getElementById('saveWeatherSettings');
+    const clearWeatherSettingsBtn = document.getElementById('clearWeatherSettings');
+    const useGeolocationBtn = document.getElementById('useGeolocation');
+    const presetLocationBtns = document.querySelectorAll('.preset-location-btn');
+
+    // 設定を読み込む
+    loadWeatherSettings();
+
+    // 天気表示クリックでモーダルを開く
+    weatherDisplay.addEventListener('click', openWeatherModal);
+
+    // モーダルを閉じる
+    closeWeatherModalBtn.addEventListener('click', closeWeatherModal);
+    cancelWeatherModalBtn.addEventListener('click', closeWeatherModal);
+    weatherModalOverlay.addEventListener('click', (e) => {
+        if (e.target === weatherModalOverlay) {
+            closeWeatherModal();
+        }
+    });
+
+    // 設定を保存
+    saveWeatherSettingsBtn.addEventListener('click', saveWeatherSettings);
+
+    // 設定を削除
+    clearWeatherSettingsBtn.addEventListener('click', clearWeatherSettings);
+
+    // 現在地を使用
+    useGeolocationBtn.addEventListener('click', useCurrentLocation);
+
+    // プリセット場所ボタン
+    presetLocationBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const lat = parseFloat(btn.dataset.lat);
+            const lon = parseFloat(btn.dataset.lon);
+            const name = btn.dataset.name;
+
+            document.getElementById('weatherLat').value = lat;
+            document.getElementById('weatherLon').value = lon;
+            document.getElementById('weatherLocation').value = name;
+
+            // アクティブ状態を更新
+            presetLocationBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
+
+    // 天気データを取得（設定がある場合）
+    if (weatherSettings) {
+        fetchWeatherData();
+        // 30分ごとに天気データを更新
+        setInterval(fetchWeatherData, 30 * 60 * 1000);
+    }
+}
+
+// 天気設定を読み込む
+function loadWeatherSettings() {
+    const saved = localStorage.getItem('weatherSettings');
+    if (saved) {
+        weatherSettings = JSON.parse(saved);
+    }
+}
+
+// 天気設定を保存
+function saveWeatherSettings() {
+    const locationName = document.getElementById('weatherLocation').value.trim();
+    const lat = parseFloat(document.getElementById('weatherLat').value);
+    const lon = parseFloat(document.getElementById('weatherLon').value);
+
+    if (!locationName || isNaN(lat) || isNaN(lon)) {
+        alert('すべての項目を入力してください');
+        return;
+    }
+
+    if (lat < -90 || lat > 90) {
+        alert('緯度は-90から90の間で入力してください');
+        return;
+    }
+
+    if (lon < -180 || lon > 180) {
+        alert('経度は-180から180の間で入力してください');
+        return;
+    }
+
+    weatherSettings = { name: locationName, lat, lon };
+    localStorage.setItem('weatherSettings', JSON.stringify(weatherSettings));
+
+    closeWeatherModal();
+    fetchWeatherData();
+
+    // 30分ごとに天気データを更新
+    setInterval(fetchWeatherData, 30 * 60 * 1000);
+}
+
+// 天気設定を削除
+function clearWeatherSettings() {
+    if (!confirm('天気設定を削除しますか？')) return;
+
+    weatherSettings = null;
+    weatherData = null;
+    localStorage.removeItem('weatherSettings');
+    updateWeatherDisplay();
+    closeWeatherModal();
+}
+
+// 天気設定モーダルを開く
+function openWeatherModal() {
+    const weatherModalOverlay = document.getElementById('weatherModalOverlay');
+
+    // 現在の設定を反映
+    if (weatherSettings) {
+        document.getElementById('weatherLocation').value = weatherSettings.name || '';
+        document.getElementById('weatherLat').value = weatherSettings.lat || '';
+        document.getElementById('weatherLon').value = weatherSettings.lon || '';
+    } else {
+        document.getElementById('weatherLocation').value = '';
+        document.getElementById('weatherLat').value = '';
+        document.getElementById('weatherLon').value = '';
+    }
+
+    // プリセットボタンのアクティブ状態をリセット
+    document.querySelectorAll('.preset-location-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+
+    weatherModalOverlay.classList.add('active');
+}
+
+// 天気設定モーダルを閉じる
+function closeWeatherModal() {
+    document.getElementById('weatherModalOverlay').classList.remove('active');
+}
+
+// 現在地を使用
+function useCurrentLocation() {
+    if (!navigator.geolocation) {
+        alert('このブラウザは位置情報をサポートしていません');
+        return;
+    }
+
+    const btn = document.getElementById('useGeolocation');
+    btn.textContent = '取得中...';
+    btn.disabled = true;
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            document.getElementById('weatherLat').value = position.coords.latitude.toFixed(4);
+            document.getElementById('weatherLon').value = position.coords.longitude.toFixed(4);
+            document.getElementById('weatherLocation').value = '現在地';
+
+            btn.textContent = '現在地を使用';
+            btn.disabled = false;
+
+            // プリセットボタンのアクティブ状態をリセット
+            document.querySelectorAll('.preset-location-btn').forEach(b => {
+                b.classList.remove('active');
+            });
+        },
+        (error) => {
+            let message = '位置情報の取得に失敗しました';
+            switch (error.code) {
+                case error.PERMISSION_DENIED:
+                    message = '位置情報の許可が拒否されました';
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    message = '位置情報が利用できません';
+                    break;
+                case error.TIMEOUT:
+                    message = '位置情報の取得がタイムアウトしました';
+                    break;
+            }
+            alert(message);
+            btn.textContent = '現在地を使用';
+            btn.disabled = false;
+        }
+    );
+}
+
+// 天気データを取得（Open-Meteo API）
+async function fetchWeatherData() {
+    if (!weatherSettings) return;
+
+    try {
+        const { lat, lon } = weatherSettings;
+        // 時間ごとの天気コードも取得
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min&hourly=weather_code&timezone=Asia%2FTokyo&forecast_days=1`;
+
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error('天気データの取得に失敗しました');
+        }
+
+        const data = await response.json();
+
+        if (data.daily && data.hourly) {
+            // 午前（6時〜11時）の天気コードを取得（最も多い天気）
+            const morningCodes = data.hourly.weather_code.slice(6, 12);
+            const morningCode = getMostFrequentCode(morningCodes);
+
+            // 午後（12時〜17時）の天気コードを取得（最も多い天気）
+            const afternoonCodes = data.hourly.weather_code.slice(12, 18);
+            const afternoonCode = getMostFrequentCode(afternoonCodes);
+
+            weatherData = {
+                morningCode: morningCode,
+                afternoonCode: afternoonCode,
+                tempMax: Math.round(data.daily.temperature_2m_max[0]),
+                tempMin: Math.round(data.daily.temperature_2m_min[0])
+            };
+            weatherLastFetched = new Date();
+            updateWeatherDisplay();
+        }
+    } catch (error) {
+        console.error('天気データ取得エラー:', error);
+    }
+}
+
+// 最も頻度の高い天気コードを取得
+function getMostFrequentCode(codes) {
+    const frequency = {};
+    let maxCount = 0;
+    let mostFrequent = codes[0];
+
+    codes.forEach(code => {
+        frequency[code] = (frequency[code] || 0) + 1;
+        if (frequency[code] > maxCount) {
+            maxCount = frequency[code];
+            mostFrequent = code;
+        }
+    });
+
+    return mostFrequent;
+}
+
+// 天気表示を更新
+function updateWeatherDisplay() {
+    const weatherDisplay = document.getElementById('weatherDisplay');
+
+    if (!weatherSettings || !weatherData) {
+        weatherDisplay.innerHTML = '';
+        return;
+    }
+
+    const morningInfo = weatherCodeMap[weatherData.morningCode] || { icon: 'unknown', desc: '不明' };
+    const afternoonInfo = weatherCodeMap[weatherData.afternoonCode] || { icon: 'unknown', desc: '不明' };
+
+    weatherDisplay.innerHTML = `
+        <span class="weather-period">
+            <span class="weather-period-label">午前</span>
+            <span class="weather-icon weather-icon-${morningInfo.icon}" title="午前: ${morningInfo.desc}"></span>
+        </span>
+        <span class="weather-period">
+            <span class="weather-period-label">午後</span>
+            <span class="weather-icon weather-icon-${afternoonInfo.icon}" title="午後: ${afternoonInfo.desc}"></span>
+        </span>
+        <span class="weather-temp">
+            <span class="weather-temp-high">${weatherData.tempMax}°</span>
+            <span class="weather-temp-low">${weatherData.tempMin}°</span>
+        </span>
+    `;
+    weatherDisplay.title = `${weatherSettings.name}: 午前 ${morningInfo.desc} / 午後 ${afternoonInfo.desc} (クリックして設定)`;
+}

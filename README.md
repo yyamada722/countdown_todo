@@ -63,6 +63,40 @@ npx http-server -p 8080
 
 ## VPN経由でのアクセス設定
 
+### Tailscaleを使用した設定（推奨）
+
+Tailscaleは設定が簡単で安全なメッシュVPNサービスです。
+
+1. **Tailscaleのインストール**
+   - 公式サイトからダウンロード: https://tailscale.com/download
+   - Windows/Mac/Linux対応
+
+2. **サーバー側の設定**
+   ```bash
+   # Tailscaleを起動してログイン
+   tailscale up
+
+   # Tailscaleの割り当てIPアドレスを確認
+   tailscale ip -4
+   ```
+
+3. **クライアント側の設定**
+   - Tailscaleをインストールして同じアカウントでログイン
+   - 自動的にサーバーとVPN接続が確立されます
+
+4. **アクセス方法**
+   ```
+   http://<TailscaleのIPアドレス>:8080
+   ```
+
+5. **Tailscaleの利点**
+   - ファイアウォール設定不要
+   - 自動的にNATトラバーサル
+   - エンドツーエンド暗号化
+   - 設定が非常に簡単
+
+### その他のVPN（従来型）
+
 1. VPNサーバーに接続
 2. サーバーマシンでアプリケーションサーバーを起動
 3. VPN内のIPアドレスを確認：
