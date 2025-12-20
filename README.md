@@ -1,5 +1,7 @@
 # Countdown Todo
 
+<img width="1056" height="470" alt="image" src="https://github.com/user-attachments/assets/92449456-08b2-437e-b5a4-25246b04c7e6" />
+
 タスクごとにカウントダウンタイマーを設定できるTodoアプリケーションです。
 
 A task management application with countdown timers for each task.
@@ -273,6 +275,7 @@ MIT License
 - **ライセンス**: M+ FONT LICENSE
 - **ライセンスページ**: https://logotype.jp/nosutaru-dot.html
 
+<<<<<<< HEAD
 ## 貢献 / Contributing
 
 1. このリポジトリをフォーク
@@ -285,3 +288,7 @@ MIT License
 
 - [リポジトリ](https://github.com/yyamada722/countdown_todo)
 - [Issues](https://github.com/yyamada722/countdown_todo/issues)
+=======
+The font is redistributable under the M+ FONT LICENSE.
+このフォントはM+ FONT LICENSEに基づいて再配布可能です。
+>>>>>>> origin/main
