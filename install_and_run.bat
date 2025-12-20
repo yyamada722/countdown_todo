@@ -1,79 +1,56 @@
 @echo off
-title Todo カウントダウン - セットアップ & 起動
+title Todo Countdown
 
 echo =====================================
-echo Todo カウントダウン
-echo セットアップ & 起動スクリプト
+echo   Todo Countdown
 echo =====================================
 echo.
 
-:: 管理者権限チェック
-net session >nul 2>&1
-if %errorlevel% neq 0 (
-    echo このスクリプトを管理者として実行することを推奨します。
-    echo.
-)
-
-:: Node.jsがインストールされているかチェック
+:: Check if Node.js is installed
 where node >nul 2>nul
 if %errorlevel% neq 0 (
-    echo エラー: Node.js がインストールされていません。
+    echo ERROR: Node.js is not installed.
     echo.
-    echo Node.js をインストールしますか？ (Y/N)
+    echo Install Node.js? [Y/N]
     set /p INSTALL_NODE=
     if /i "%INSTALL_NODE%"=="Y" (
-        echo ブラウザで Node.js のダウンロードページを開きます...
+        echo Opening Node.js download page...
         start https://nodejs.org/
         echo.
-        echo Node.js をインストール後、このスクリプトを再実行してください。
+        echo Please re-run this script after installing Node.js.
         pause
         exit /b 1
     ) else (
-        echo Node.js がないと実行できません。終了します。
+        echo Cannot run without Node.js. Exiting.
         pause
         exit /b 1
     )
 )
 
-:: Node.jsのバージョンを表示
-echo Node.js バージョン:
+:: Display Node.js version
+echo Node.js version:
 node --version
 echo.
 
-:: npmがインストールされているかチェック
-where npm >nul 2>nul
-if %errorlevel% neq 0 (
-    echo エラー: npm がインストールされていません。
-    echo Node.js を再インストールしてください。
-    pause
-    exit /b 1
-)
+:: Start server in new window
+echo Starting server...
+start "Todo Server" cmd /k "cd /d %~dp0 && node server.js"
 
-:: ポート番号を設定
-set PORT=3030
-
-:: サーバーを起動（新しいウィンドウで）
-echo サーバーを起動しています...
-start "Todo Server" cmd /k "node server.js"
-
-:: 少し待つ
-echo サーバーの起動を待っています...
+:: Wait for server to start
+echo Waiting for server...
 timeout /t 3 /nobreak >nul
 
-:: ブラウザで開く
-echo.
-echo ブラウザでアプリケーションを開いています...
-start http://localhost:%PORT%
+:: Open browser
+echo Opening browser...
+start http://localhost:8080
 
 echo.
 echo =====================================
-echo セットアップ完了！
+echo   Started!
 echo =====================================
 echo.
-echo サーバー: http://localhost:%PORT%
+echo App: http://localhost:8080
 echo.
-echo 終了するには:
-echo 1. サーバーウィンドウで Ctrl+C を押す
-echo 2. このウィンドウを閉じる
+echo To stop: Press Ctrl+C in the server window
 echo.
 pause
