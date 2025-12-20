@@ -50,7 +50,7 @@ body {
     max-width: 1200px;
     margin: 0 auto;
     padding: 16px;
-    padding-top: 200px; /* 時計表示の高さ分の余白 */
+    padding-top: 230px; /* 時計表示+天気の高さ分の余白 */
 }
 
 /* 時刻表示 */
@@ -1611,7 +1611,7 @@ input[type="datetime-local"] {
 @media (max-width: 768px) {
     .container {
         padding: 10px;
-        padding-top: 140px; /* 時計表示の高さ分の余白（モバイル） */
+        padding-top: 195px; /* 時計表示+天気の高さ分の余白（モバイル） */
         padding-bottom: 80px; /* FABのスペース確保 */
     }
     
@@ -1873,7 +1873,7 @@ input[type="datetime-local"] {
 
 @media (max-width: 480px) {
     .container {
-        padding-top: 120px; /* さらに小さい画面用の調整 */
+        padding-top: 175px; /* さらに小さい画面+天気用の調整 */
     }
     
     .clock-container {
