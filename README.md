@@ -1,17 +1,64 @@
 # Countdown Todo
 
-A task management application with countdown timers for each task.
-
 タスクごとにカウントダウンタイマーを設定できるTodoアプリケーションです。
 
-## Features / 機能
+A task management application with countdown timers for each task.
 
-- ✅ Create, edit, and delete tasks / タスクの作成・編集・削除
-- ⏰ Set deadlines with countdown timers / 各タスクに期限を設定してカウントダウン表示
-- 📅 Calendar-based date selection / カレンダー形式での日付選択
-- 💾 Local storage persistence / ローカルストレージでのデータ永続化
-- 🌙 Dark theme UI / ダークテーマUI
-- 📱 PWA support / PWA対応
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Node](https://img.shields.io/badge/node-%3E%3D12.0.0-green.svg)
+
+## 機能 / Features
+
+### コア機能
+- **タスク管理** - タスクの作成・編集・削除・完了
+- **カウントダウン表示** - 各タスクに期限を設定してリアルタイムでカウントダウン表示
+- **カレンダー形式の日付選択** - 直感的なUIで期限を設定
+- **データ永続化** - サーバーサイドでJSONデータベースに保存
+
+### タスク機能
+- **通常タスク** - 特定の期限を設定
+- **今から始めるタスク** - 作業時間を指定（5分〜3時間）
+- **繰り返し設定** - 毎日/毎週/隔週/毎月/平日のみ
+- **事前通知** - 10分前〜1日前に通知
+- **メモ機能** - タスクにメモを追加
+- **複数タスク一括登録** - 同じ設定で複数タスクを一度に作成
+
+### 表示・フィルター
+- **フィルタータブ** - アクティブ/今日/明日/完了済み/統計/週間/スケジュール
+- **ステータス表示** - SCHEDULED/ON TIME/SOON/URGENT/OVERDUE
+- **週間ビュー** - 1週間のタスクを俯瞰
+- **統計機能** - タスク完了状況の統計表示
+
+### スケジュール機能
+- **プリセット** - よく使うタスクセットを保存
+- **スケジュール** - 定期的なタスクをテンプレート化
+- **一括作成** - スケジュールから今日/明日のタスクを生成
+
+### 天気予報
+- **天気表示** - 時計横に午前/午後の天気をドット絵アイコンで表示
+- **位置情報** - 手動入力またはGPSで位置を設定
+- **プリセット都市** - 東京/大阪/名古屋/札幌/福岡
+
+### その他
+- **PWA対応** - ホーム画面に追加してアプリとして利用可能
+- **ダークテーマ** - 目に優しいダークモードUI
+- **レスポンシブ** - PC/タブレット/スマートフォン対応
+- **通知機能** - ブラウザ通知でタスクをリマインド
+
+## スクリーンショット
+
+```
+┌─────────────────────────────────────┐
+│           14:32:45                  │
+│     2025/12/20 (土) ☀️ ☁️ 12°/5°    │
+├─────────────────────────────────────┤
+│ [アクティブ][今日][明日][完了][統計] │
+├─────────────────────────────────────┤
+│ ● 買い物に行く           00:45:30  │
+│ ● レポート提出           02:15:00  │
+│ ● ミーティング           05:30:00  │
+└─────────────────────────────────────┘
+```
 
 ## サーバーの起動方法
 
@@ -58,6 +105,47 @@ npx http-server -p 8080
 1. **ローカルアクセス**: `http://localhost:8080`
 2. **LAN内アクセス**: `http://<サーバーのIPアドレス>:8080`
 3. **VPN経由アクセス**: `http://<VPNで割り当てられたIPアドレス>:8080`
+
+## API エンドポイント
+
+サーバーは以下のREST APIを提供します：
+
+### Todos
+
+| メソッド | エンドポイント | 説明 |
+|---------|---------------|------|
+| GET | `/api/todos` | 全タスクを取得 |
+| POST | `/api/todos` | 新規タスク作成 |
+| PUT | `/api/todos/:id` | タスク更新 |
+| DELETE | `/api/todos/:id` | タスク削除（アーカイブ） |
+| POST | `/api/todos/sync` | 全タスク同期 |
+
+### Presets
+
+| メソッド | エンドポイント | 説明 |
+|---------|---------------|------|
+| GET | `/api/presets` | プリセット一覧取得 |
+| POST | `/api/presets` | プリセット作成 |
+| PUT | `/api/presets/:id` | プリセット更新 |
+| DELETE | `/api/presets/:id` | プリセット削除 |
+| POST | `/api/presets/:id/apply` | プリセット適用 |
+
+### Schedules
+
+| メソッド | エンドポイント | 説明 |
+|---------|---------------|------|
+| GET | `/api/schedules` | スケジュール一覧取得 |
+| POST | `/api/schedules` | スケジュール作成 |
+| PUT | `/api/schedules/:id` | スケジュール更新 |
+| DELETE | `/api/schedules/:id` | スケジュール削除 |
+| POST | `/api/schedules/batch-create` | 一括タスク作成 |
+
+### Stats
+
+| メソッド | エンドポイント | 説明 |
+|---------|---------------|------|
+| GET | `/api/stats` | ユーザー統計取得 |
+| POST | `/api/stats/complete` | 完了統計更新 |
 
 ## VPN経由でのアクセス設定
 
@@ -125,48 +213,75 @@ sudo ufw allow 8080/tcp
 ### Mac
 システム環境設定 → セキュリティとプライバシー → ファイアウォール → ファイアウォールオプション
 
-## セキュリティ上の注意 / Security Notes
+## プロジェクト構造
 
-- このアプリケーションは開発用途を想定しています / This application is intended for development use
-- インターネットに直接公開する場合は、適切なセキュリティ対策を実施してください / Implement appropriate security measures if exposing to the internet
-- VPN経由でのアクセスを推奨します / VPN access is recommended
+```
+countdown_todo/
+├── index.html          # メインHTML
+├── script.js           # フロントエンドロジック
+├── style.css           # スタイルシート
+├── server.js           # Node.jsサーバー
+├── package.json        # npm設定
+├── manifest.json       # PWAマニフェスト
+├── service-worker.js   # Service Worker
+├── data/
+│   └── todos.json      # データベース（自動生成）
+├── fonts/
+│   └── Nosutaru-dotMPlusH-10-Regular.ttf
+├── icon-192.png        # PWAアイコン
+└── icon-512.png        # PWAアイコン
+```
 
-## Installation / インストール
+## インストール / Installation
 
 ### Windows
-1. Download and extract the ZIP file / ZIPファイルをダウンロードして展開
-2. Run `install_and_run.bat` / `install_and_run.bat`を実行
+1. ZIPファイルをダウンロードして展開
+2. `install_and_run.bat` を実行
 
 ### macOS/Linux
-1. Clone the repository / リポジトリをクローン
-   ```bash
-   git clone https://github.com/[your-username]/countdown-todo.git
-   cd countdown-todo
-   ```
-2. Start the server / サーバーを起動
-   ```bash
-   node server.js
-   ```
+```bash
+# リポジトリをクローン
+git clone https://github.com/yyamada722/countdown_todo.git
+cd countdown_todo
 
-## Requirements / 必要環境
+# サーバーを起動
+node server.js
+```
 
-- Node.js 12.0.0 or higher (recommended) / Node.js 12.0.0以上（推奨）
-- Or Python 3.x / または Python 3.x
-- Modern web browser / モダンなWebブラウザ
+## 必要環境 / Requirements
 
-## License
+- Node.js 12.0.0 以上（推奨）
+- または Python 3.x
+- モダンなWebブラウザ（Chrome, Firefox, Safari, Edge）
+
+## セキュリティ上の注意 / Security Notes
+
+- このアプリケーションは開発・個人利用を想定しています
+- インターネットに直接公開する場合は、適切なセキュリティ対策を実施してください
+- VPN経由でのアクセスを推奨します
+
+## ライセンス / License
 
 MIT License
 
-## Font License / フォントライセンス
+### フォントライセンス / Font License
 
-This application uses "Nosutaru-dotMPlusH-10-Regular" font.
 このアプリケーションでは「ノスタルドット（M+H）」フォントを使用しています。
 
-- Font Name / フォント名: ノスタルドット（M+H）
-- Designer / デザイナー: 永山嘉昭（フロップデザイン）
-- License Page / ライセンスページ: https://logotype.jp/nosutaru-dot.html
-- License / ライセンス: M+ FONT LICENSE
+- **フォント名**: ノスタルドット（M+H）
+- **デザイナー**: 永山嘉昭（フロップデザイン）
+- **ライセンス**: M+ FONT LICENSE
+- **ライセンスページ**: https://logotype.jp/nosutaru-dot.html
 
-The font is redistributable under the M+ FONT LICENSE.
-このフォントはM+ FONT LICENSEに基づいて再配布可能です。
+## 貢献 / Contributing
+
+1. このリポジトリをフォーク
+2. 機能ブランチを作成 (`git checkout -b feature/amazing-feature`)
+3. 変更をコミット (`git commit -m 'Add amazing feature'`)
+4. ブランチをプッシュ (`git push origin feature/amazing-feature`)
+5. プルリクエストを作成
+
+## 関連リンク
+
+- [リポジトリ](https://github.com/yyamada722/countdown_todo)
+- [Issues](https://github.com/yyamada722/countdown_todo/issues)
