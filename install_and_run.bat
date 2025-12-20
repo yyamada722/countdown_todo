@@ -1,25 +1,18 @@
 @echo off
-title Todo カウントダウン - セットアップ & 起動
+chcp 65001 >nul
+title Todo カウントダウン
 
 echo =====================================
-echo Todo カウントダウン
-echo セットアップ & 起動スクリプト
+echo   Todo カウントダウン
 echo =====================================
 echo.
-
-:: 管理者権限チェック
-net session >nul 2>&1
-if %errorlevel% neq 0 (
-    echo このスクリプトを管理者として実行することを推奨します。
-    echo.
-)
 
 :: Node.jsがインストールされているかチェック
 where node >nul 2>nul
 if %errorlevel% neq 0 (
     echo エラー: Node.js がインストールされていません。
     echo.
-    echo Node.js をインストールしますか？ (Y/N)
+    echo Node.js をインストールしますか？ [Y/N]
     set /p INSTALL_NODE=
     if /i "%INSTALL_NODE%"=="Y" (
         echo ブラウザで Node.js のダウンロードページを開きます...
@@ -40,40 +33,26 @@ echo Node.js バージョン:
 node --version
 echo.
 
-:: npmがインストールされているかチェック
-where npm >nul 2>nul
-if %errorlevel% neq 0 (
-    echo エラー: npm がインストールされていません。
-    echo Node.js を再インストールしてください。
-    pause
-    exit /b 1
-)
-
-:: ポート番号を設定
-set PORT=8080
-
 :: サーバーを起動（新しいウィンドウで）
 echo サーバーを起動しています...
-start "Todo Server" cmd /k "node server.js"
+start "Todo Server" cmd /k "cd /d %~dp0 && node server.js"
 
 :: 少し待つ
 echo サーバーの起動を待っています...
 timeout /t 3 /nobreak >nul
 
 :: ブラウザで開く
-echo.
 echo ブラウザでアプリケーションを開いています...
-start http://localhost:%PORT%
+start http://localhost:8080
 
 echo.
 echo =====================================
-echo セットアップ完了！
+echo   起動完了！
 echo =====================================
 echo.
-echo サーバー: http://localhost:%PORT%
+echo アプリ: http://localhost:8080
 echo.
 echo 終了するには:
-echo 1. サーバーウィンドウで Ctrl+C を押す
-echo 2. このウィンドウを閉じる
+echo   サーバーウィンドウで Ctrl+C を押してください
 echo.
 pause
