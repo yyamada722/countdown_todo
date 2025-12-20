@@ -1,58 +1,56 @@
 @echo off
-chcp 65001 >nul
-title Todo カウントダウン
+title Todo Countdown
 
 echo =====================================
-echo   Todo カウントダウン
+echo   Todo Countdown
 echo =====================================
 echo.
 
-:: Node.jsがインストールされているかチェック
+:: Check if Node.js is installed
 where node >nul 2>nul
 if %errorlevel% neq 0 (
-    echo エラー: Node.js がインストールされていません。
+    echo ERROR: Node.js is not installed.
     echo.
-    echo Node.js をインストールしますか？ [Y/N]
+    echo Install Node.js? [Y/N]
     set /p INSTALL_NODE=
     if /i "%INSTALL_NODE%"=="Y" (
-        echo ブラウザで Node.js のダウンロードページを開きます...
+        echo Opening Node.js download page...
         start https://nodejs.org/
         echo.
-        echo Node.js をインストール後、このスクリプトを再実行してください。
+        echo Please re-run this script after installing Node.js.
         pause
         exit /b 1
     ) else (
-        echo Node.js がないと実行できません。終了します。
+        echo Cannot run without Node.js. Exiting.
         pause
         exit /b 1
     )
 )
 
-:: Node.jsのバージョンを表示
-echo Node.js バージョン:
+:: Display Node.js version
+echo Node.js version:
 node --version
 echo.
 
-:: サーバーを起動（新しいウィンドウで）
-echo サーバーを起動しています...
+:: Start server in new window
+echo Starting server...
 start "Todo Server" cmd /k "cd /d %~dp0 && node server.js"
 
-:: 少し待つ
-echo サーバーの起動を待っています...
+:: Wait for server to start
+echo Waiting for server...
 timeout /t 3 /nobreak >nul
 
-:: ブラウザで開く
-echo ブラウザでアプリケーションを開いています...
+:: Open browser
+echo Opening browser...
 start http://localhost:8080
 
 echo.
 echo =====================================
-echo   起動完了！
+echo   Started!
 echo =====================================
 echo.
-echo アプリ: http://localhost:8080
+echo App: http://localhost:8080
 echo.
-echo 終了するには:
-echo   サーバーウィンドウで Ctrl+C を押してください
+echo To stop: Press Ctrl+C in the server window
 echo.
 pause
