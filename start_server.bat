@@ -21,8 +21,8 @@ echo Node.js バージョン:
 node --version
 echo.
 
-:: ポート番号を設定（デフォルト: 3030）
-set PORT=3030
+:: ポート番号を設定（デフォルト: 8080）
+set PORT=8080
 
 :: 既に使用中のポートをチェック
 netstat -an | findstr :%PORT% >nul

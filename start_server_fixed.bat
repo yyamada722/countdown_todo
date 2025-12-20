@@ -22,8 +22,8 @@ echo Node.js version:
 node --version
 echo.
 
-:: Set port number (default: 3030)
-set PORT=3030
+:: Set port number (default: 8080)
+set PORT=8080
 
 :: Check if port is already in use
 netstat -an | findstr :%PORT% >nul
