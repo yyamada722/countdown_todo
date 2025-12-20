@@ -78,12 +78,203 @@ body {
     text-shadow: 2px 2px 0 #064e3b;
 }
 
+.clock-date-weather {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
 .clock-date {
     font-size: 1.5rem;
     font-family: 'Nosutaru-dotMPlusH', monospace;
     opacity: 1;
     color: #0fa968;
     text-shadow: none;
+}
+
+/* 天気表示 */
+.weather-display {
+    font-size: 1.2rem;
+    font-family: 'Nosutaru-dotMPlusH', monospace;
+    color: #87CEEB;
+    cursor: pointer;
+    padding: 4px 12px;
+    border: 1px solid #87CEEB;
+    border-radius: 4px;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.weather-display:hover {
+    background-color: rgba(135, 206, 235, 0.2);
+    border-color: #ADD8E6;
+}
+
+.weather-display:empty::after {
+    content: '天気を設定';
+    font-size: 0.9rem;
+    opacity: 0.7;
+}
+
+/* ドット絵風天気アイコン */
+.weather-icon {
+    width: 24px;
+    height: 24px;
+    display: inline-block;
+    image-rendering: pixelated;
+    position: relative;
+}
+
+/* 晴れ - 太陽 */
+.weather-icon-sunny {
+    background:
+        /* 中心 */
+        linear-gradient(#FFD700, #FFD700) 8px 8px / 8px 8px no-repeat,
+        /* 上 */
+        linear-gradient(#FFD700, #FFD700) 10px 2px / 4px 4px no-repeat,
+        /* 下 */
+        linear-gradient(#FFD700, #FFD700) 10px 18px / 4px 4px no-repeat,
+        /* 左 */
+        linear-gradient(#FFD700, #FFD700) 2px 10px / 4px 4px no-repeat,
+        /* 右 */
+        linear-gradient(#FFD700, #FFD700) 18px 10px / 4px 4px no-repeat,
+        /* 斜め */
+        linear-gradient(#FFD700, #FFD700) 4px 4px / 2px 2px no-repeat,
+        linear-gradient(#FFD700, #FFD700) 18px 4px / 2px 2px no-repeat,
+        linear-gradient(#FFD700, #FFD700) 4px 18px / 2px 2px no-repeat,
+        linear-gradient(#FFD700, #FFD700) 18px 18px / 2px 2px no-repeat;
+}
+
+/* 曇り - 雲 */
+.weather-icon-cloudy {
+    background:
+        linear-gradient(#aaa, #aaa) 6px 8px / 12px 8px no-repeat,
+        linear-gradient(#aaa, #aaa) 4px 10px / 4px 6px no-repeat,
+        linear-gradient(#aaa, #aaa) 16px 10px / 4px 6px no-repeat,
+        linear-gradient(#aaa, #aaa) 8px 6px / 8px 4px no-repeat;
+}
+
+/* 曇り時々晴れ */
+.weather-icon-cloudy-sun {
+    background:
+        /* 太陽（右上） */
+        linear-gradient(#FFD700, #FFD700) 14px 2px / 8px 8px no-repeat,
+        linear-gradient(#FFD700, #FFD700) 18px 0px / 4px 2px no-repeat,
+        linear-gradient(#FFD700, #FFD700) 22px 4px / 2px 4px no-repeat,
+        /* 雲（左下） */
+        linear-gradient(#ccc, #ccc) 2px 12px / 14px 8px no-repeat,
+        linear-gradient(#ccc, #ccc) 0px 14px / 4px 4px no-repeat,
+        linear-gradient(#ccc, #ccc) 4px 10px / 8px 4px no-repeat;
+}
+
+/* 雨 */
+.weather-icon-rainy {
+    background:
+        /* 雲 */
+        linear-gradient(#888, #888) 4px 4px / 16px 8px no-repeat,
+        linear-gradient(#888, #888) 2px 6px / 4px 4px no-repeat,
+        linear-gradient(#888, #888) 18px 6px / 4px 4px no-repeat,
+        /* 雨粒 */
+        linear-gradient(#4dabf7, #4dabf7) 6px 14px / 2px 4px no-repeat,
+        linear-gradient(#4dabf7, #4dabf7) 12px 16px / 2px 4px no-repeat,
+        linear-gradient(#4dabf7, #4dabf7) 18px 14px / 2px 4px no-repeat;
+}
+
+/* 大雨 */
+.weather-icon-rainy-heavy {
+    background:
+        /* 雲 */
+        linear-gradient(#666, #666) 4px 2px / 16px 8px no-repeat,
+        linear-gradient(#666, #666) 2px 4px / 4px 4px no-repeat,
+        linear-gradient(#666, #666) 18px 4px / 4px 4px no-repeat,
+        /* 雨粒（多め） */
+        linear-gradient(#4dabf7, #4dabf7) 4px 12px / 2px 6px no-repeat,
+        linear-gradient(#4dabf7, #4dabf7) 10px 14px / 2px 6px no-repeat,
+        linear-gradient(#4dabf7, #4dabf7) 16px 12px / 2px 6px no-repeat,
+        linear-gradient(#4dabf7, #4dabf7) 20px 16px / 2px 4px no-repeat;
+}
+
+/* 雪 */
+.weather-icon-snowy {
+    background:
+        /* 雲 */
+        linear-gradient(#aaa, #aaa) 4px 4px / 16px 8px no-repeat,
+        linear-gradient(#aaa, #aaa) 2px 6px / 4px 4px no-repeat,
+        linear-gradient(#aaa, #aaa) 18px 6px / 4px 4px no-repeat,
+        /* 雪 */
+        linear-gradient(#fff, #fff) 6px 14px / 2px 2px no-repeat,
+        linear-gradient(#fff, #fff) 10px 18px / 2px 2px no-repeat,
+        linear-gradient(#fff, #fff) 16px 14px / 2px 2px no-repeat,
+        linear-gradient(#fff, #fff) 12px 14px / 2px 2px no-repeat,
+        linear-gradient(#fff, #fff) 18px 18px / 2px 2px no-repeat;
+}
+
+/* 雷 */
+.weather-icon-thunder {
+    background:
+        /* 雲 */
+        linear-gradient(#555, #555) 4px 2px / 16px 8px no-repeat,
+        linear-gradient(#555, #555) 2px 4px / 4px 4px no-repeat,
+        linear-gradient(#555, #555) 18px 4px / 4px 4px no-repeat,
+        /* 稲妻 */
+        linear-gradient(#FFD700, #FFD700) 10px 10px / 4px 2px no-repeat,
+        linear-gradient(#FFD700, #FFD700) 8px 12px / 4px 2px no-repeat,
+        linear-gradient(#FFD700, #FFD700) 10px 14px / 6px 2px no-repeat,
+        linear-gradient(#FFD700, #FFD700) 12px 16px / 4px 2px no-repeat,
+        linear-gradient(#FFD700, #FFD700) 14px 18px / 2px 4px no-repeat;
+}
+
+/* 霧 */
+.weather-icon-fog {
+    background:
+        linear-gradient(#999, #999) 2px 6px / 20px 2px no-repeat,
+        linear-gradient(#888, #888) 4px 10px / 16px 2px no-repeat,
+        linear-gradient(#777, #777) 2px 14px / 20px 2px no-repeat,
+        linear-gradient(#666, #666) 6px 18px / 12px 2px no-repeat;
+}
+
+/* 不明 */
+.weather-icon-unknown {
+    background:
+        linear-gradient(#888, #888) 8px 4px / 8px 2px no-repeat,
+        linear-gradient(#888, #888) 14px 6px / 2px 4px no-repeat,
+        linear-gradient(#888, #888) 10px 10px / 4px 2px no-repeat,
+        linear-gradient(#888, #888) 10px 12px / 2px 4px no-repeat,
+        linear-gradient(#888, #888) 10px 18px / 2px 2px no-repeat;
+}
+
+.weather-period {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.weather-period-label {
+    font-size: 0.65rem;
+    color: #888;
+    letter-spacing: -0.5px;
+}
+
+.weather-temp {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    font-size: 0.9rem;
+    line-height: 1.2;
+}
+
+.weather-temp-high {
+    color: #ff6b6b;
+}
+
+.weather-temp-low {
+    color: #4dabf7;
 }
 
 /* 通知設定ボタン */
@@ -3103,10 +3294,124 @@ input[type="datetime-local"] {
         align-items: stretch;
         gap: 8px;
     }
-    
+
     .completed-task-times {
         flex-direction: row;
         justify-content: space-between;
         align-items: center;
+    }
+}
+
+/* 天気設定モーダル */
+.weather-modal {
+    max-width: 450px;
+}
+
+.location-inputs {
+    display: flex;
+    gap: 12px;
+}
+
+.location-input {
+    flex: 1;
+}
+
+.preset-locations {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.preset-location-btn {
+    padding: 8px 16px;
+    background-color: #1f1f1f;
+    border: 1px solid #444;
+    color: #ccc;
+    font-family: 'Nosutaru-dotMPlusH', monospace;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.preset-location-btn:hover {
+    background-color: #333;
+    border-color: #87CEEB;
+    color: #87CEEB;
+}
+
+.preset-location-btn.active {
+    background-color: #1a3a4a;
+    border-color: #87CEEB;
+    color: #87CEEB;
+}
+
+.btn-geolocation {
+    width: 100%;
+    padding: 10px 16px;
+    background-color: transparent;
+    border: 2px dashed #10b981;
+    color: #10b981;
+    font-family: 'Nosutaru-dotMPlusH', monospace;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 12px;
+}
+
+.btn-geolocation:hover {
+    background-color: rgba(16, 185, 129, 0.1);
+    border-style: solid;
+}
+
+.btn-weather-clear {
+    padding: 10px 16px;
+    background-color: transparent;
+    border: 1px solid #666;
+    color: #888;
+    font-family: 'Nosutaru-dotMPlusH', monospace;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-weather-clear:hover {
+    background-color: rgba(255, 68, 68, 0.2);
+    border-color: #ff4444;
+    color: #ff4444;
+}
+
+/* モバイル対応 */
+@media (max-width: 768px) {
+    .clock-date-weather {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .weather-display {
+        font-size: 1rem;
+        padding: 3px 10px;
+    }
+
+    .weather-icon {
+        width: 20px;
+        height: 20px;
+    }
+
+    .weather-period-label {
+        font-size: 0.6rem;
+    }
+
+    .weather-temp {
+        font-size: 0.8rem;
+    }
+
+    .location-inputs {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .preset-locations {
+        justify-content: center;
     }
 }

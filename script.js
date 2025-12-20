@@ -4,6 +4,11 @@ let clockInterval;
 let syncInterval;
 let schedules = []; // スケジュール（繰り返しタスク）の配列
 
+// 天気関連のグローバル変数
+let weatherSettings = null;
+let weatherData = null;
+let weatherLastFetched = null;
+
 // カウントダウンのみを更新する関数
 let animationFrameId = null;
 
@@ -171,12 +176,15 @@ function init() {
     
     // 同期状態表示を追加
     addSyncIndicator();
-    
+
     // ゲーミフィケーション表示を追加（削除）
     // addGameStats();
-    
+
     // 通知許可状態を更新
     updateNotificationButtonState();
+
+    // 天気機能を初期化
+    initWeather();
 }
 
 // ユーザー統計を読み込む
@@ -2026,6 +2034,19 @@ function renderStats() {
         thisWeek: upcomingWeekTasks - todayTasks - tomorrowTasks,
         later: activeTasks - overdueTasks - upcomingWeekTasks
     };
+
+    // 最古のタスクからの経過日数
+    let oldestTaskDays = 0;
+    if (activeTasks > 0) {
+        const activeTodosWithCreatedAt = todos.filter(t => !t.archived && t.createdAt);
+        if (activeTodosWithCreatedAt.length > 0) {
+            const oldestTask = activeTodosWithCreatedAt.reduce((oldest, current) => {
+                return new Date(current.createdAt) < new Date(oldest.createdAt) ? current : oldest;
+            });
+            const oldestDate = new Date(oldestTask.createdAt);
+            oldestTaskDays = Math.floor((now - oldestDate) / (1000 * 60 * 60 * 24));
+        }
+    }
     
     // タスク分析
     const taskAnalysis = analyzeTaskNames(todos);
@@ -2305,6 +2326,12 @@ function renderStats() {
                         <span class="stat-label">完了率:</span>
                         <span class="stat-value">${completionRate}%</span>
                     </div>
+                    ${oldestTaskDays > 0 ? `
+                    <div class="stat-item">
+                        <span class="stat-label">最古のタスク:</span>
+                        <span class="stat-value">${oldestTaskDays}日前</span>
+                    </div>
+                    ` : ''}
                 </div>
             </div>
             
@@ -4307,3 +4334,308 @@ window.deleteSchedule = deleteSchedule;
 window.batchCreateTasks = batchCreateTasks;
 window.openScheduleModal = openScheduleModal;
 window.applyPreset = applyPreset;
+
+// =====================
+// 天気機能
+// =====================
+
+// 天気コードからアイコンと説明へのマッピング（ドット絵風）
+const weatherCodeMap = {
+    0: { icon: 'sunny', desc: '快晴' },
+    1: { icon: 'sunny', desc: '晴れ' },
+    2: { icon: 'cloudy-sun', desc: '曇り時々晴れ' },
+    3: { icon: 'cloudy', desc: '曇り' },
+    45: { icon: 'fog', desc: '霧' },
+    48: { icon: 'fog', desc: '霧氷' },
+    51: { icon: 'rainy', desc: '霧雨' },
+    53: { icon: 'rainy', desc: '霧雨' },
+    55: { icon: 'rainy', desc: '霧雨' },
+    56: { icon: 'rainy', desc: '凍結霧雨' },
+    57: { icon: 'rainy', desc: '凍結霧雨' },
+    61: { icon: 'rainy', desc: '小雨' },
+    63: { icon: 'rainy', desc: '雨' },
+    65: { icon: 'rainy-heavy', desc: '大雨' },
+    66: { icon: 'rainy', desc: '凍結雨' },
+    67: { icon: 'rainy', desc: '凍結雨' },
+    71: { icon: 'snowy', desc: '小雪' },
+    73: { icon: 'snowy', desc: '雪' },
+    75: { icon: 'snowy', desc: '大雪' },
+    77: { icon: 'snowy', desc: '霧雪' },
+    80: { icon: 'rainy', desc: 'にわか雨' },
+    81: { icon: 'rainy', desc: 'にわか雨' },
+    82: { icon: 'rainy-heavy', desc: '激しいにわか雨' },
+    85: { icon: 'snowy', desc: 'にわか雪' },
+    86: { icon: 'snowy', desc: 'にわか雪' },
+    95: { icon: 'thunder', desc: '雷雨' },
+    96: { icon: 'thunder', desc: '雷雨（雹）' },
+    99: { icon: 'thunder', desc: '雷雨（大粒雹）' }
+};
+
+// 天気機能を初期化
+function initWeather() {
+    // DOM要素を取得
+    const weatherDisplay = document.getElementById('weatherDisplay');
+    const weatherModalOverlay = document.getElementById('weatherModalOverlay');
+    const closeWeatherModalBtn = document.getElementById('closeWeatherModal');
+    const cancelWeatherModalBtn = document.getElementById('cancelWeatherModal');
+    const saveWeatherSettingsBtn = document.getElementById('saveWeatherSettings');
+    const clearWeatherSettingsBtn = document.getElementById('clearWeatherSettings');
+    const useGeolocationBtn = document.getElementById('useGeolocation');
+    const presetLocationBtns = document.querySelectorAll('.preset-location-btn');
+
+    // 設定を読み込む
+    loadWeatherSettings();
+
+    // 天気表示クリックでモーダルを開く
+    weatherDisplay.addEventListener('click', openWeatherModal);
+
+    // モーダルを閉じる
+    closeWeatherModalBtn.addEventListener('click', closeWeatherModal);
+    cancelWeatherModalBtn.addEventListener('click', closeWeatherModal);
+    weatherModalOverlay.addEventListener('click', (e) => {
+        if (e.target === weatherModalOverlay) {
+            closeWeatherModal();
+        }
+    });
+
+    // 設定を保存
+    saveWeatherSettingsBtn.addEventListener('click', saveWeatherSettings);
+
+    // 設定を削除
+    clearWeatherSettingsBtn.addEventListener('click', clearWeatherSettings);
+
+    // 現在地を使用
+    useGeolocationBtn.addEventListener('click', useCurrentLocation);
+
+    // プリセット場所ボタン
+    presetLocationBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const lat = parseFloat(btn.dataset.lat);
+            const lon = parseFloat(btn.dataset.lon);
+            const name = btn.dataset.name;
+
+            document.getElementById('weatherLat').value = lat;
+            document.getElementById('weatherLon').value = lon;
+            document.getElementById('weatherLocation').value = name;
+
+            // アクティブ状態を更新
+            presetLocationBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
+
+    // 天気データを取得（設定がある場合）
+    if (weatherSettings) {
+        fetchWeatherData();
+        // 30分ごとに天気データを更新
+        setInterval(fetchWeatherData, 30 * 60 * 1000);
+    }
+}
+
+// 天気設定を読み込む
+function loadWeatherSettings() {
+    const saved = localStorage.getItem('weatherSettings');
+    if (saved) {
+        weatherSettings = JSON.parse(saved);
+    }
+}
+
+// 天気設定を保存
+function saveWeatherSettings() {
+    const locationName = document.getElementById('weatherLocation').value.trim();
+    const lat = parseFloat(document.getElementById('weatherLat').value);
+    const lon = parseFloat(document.getElementById('weatherLon').value);
+
+    if (!locationName || isNaN(lat) || isNaN(lon)) {
+        alert('すべての項目を入力してください');
+        return;
+    }
+
+    if (lat < -90 || lat > 90) {
+        alert('緯度は-90から90の間で入力してください');
+        return;
+    }
+
+    if (lon < -180 || lon > 180) {
+        alert('経度は-180から180の間で入力してください');
+        return;
+    }
+
+    weatherSettings = { name: locationName, lat, lon };
+    localStorage.setItem('weatherSettings', JSON.stringify(weatherSettings));
+
+    closeWeatherModal();
+    fetchWeatherData();
+
+    // 30分ごとに天気データを更新
+    setInterval(fetchWeatherData, 30 * 60 * 1000);
+}
+
+// 天気設定を削除
+function clearWeatherSettings() {
+    if (!confirm('天気設定を削除しますか？')) return;
+
+    weatherSettings = null;
+    weatherData = null;
+    localStorage.removeItem('weatherSettings');
+    updateWeatherDisplay();
+    closeWeatherModal();
+}
+
+// 天気設定モーダルを開く
+function openWeatherModal() {
+    const weatherModalOverlay = document.getElementById('weatherModalOverlay');
+
+    // 現在の設定を反映
+    if (weatherSettings) {
+        document.getElementById('weatherLocation').value = weatherSettings.name || '';
+        document.getElementById('weatherLat').value = weatherSettings.lat || '';
+        document.getElementById('weatherLon').value = weatherSettings.lon || '';
+    } else {
+        document.getElementById('weatherLocation').value = '';
+        document.getElementById('weatherLat').value = '';
+        document.getElementById('weatherLon').value = '';
+    }
+
+    // プリセットボタンのアクティブ状態をリセット
+    document.querySelectorAll('.preset-location-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+
+    weatherModalOverlay.classList.add('active');
+}
+
+// 天気設定モーダルを閉じる
+function closeWeatherModal() {
+    document.getElementById('weatherModalOverlay').classList.remove('active');
+}
+
+// 現在地を使用
+function useCurrentLocation() {
+    if (!navigator.geolocation) {
+        alert('このブラウザは位置情報をサポートしていません');
+        return;
+    }
+
+    const btn = document.getElementById('useGeolocation');
+    btn.textContent = '取得中...';
+    btn.disabled = true;
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            document.getElementById('weatherLat').value = position.coords.latitude.toFixed(4);
+            document.getElementById('weatherLon').value = position.coords.longitude.toFixed(4);
+            document.getElementById('weatherLocation').value = '現在地';
+
+            btn.textContent = '現在地を使用';
+            btn.disabled = false;
+
+            // プリセットボタンのアクティブ状態をリセット
+            document.querySelectorAll('.preset-location-btn').forEach(b => {
+                b.classList.remove('active');
+            });
+        },
+        (error) => {
+            let message = '位置情報の取得に失敗しました';
+            switch (error.code) {
+                case error.PERMISSION_DENIED:
+                    message = '位置情報の許可が拒否されました';
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    message = '位置情報が利用できません';
+                    break;
+                case error.TIMEOUT:
+                    message = '位置情報の取得がタイムアウトしました';
+                    break;
+            }
+            alert(message);
+            btn.textContent = '現在地を使用';
+            btn.disabled = false;
+        }
+    );
+}
+
+// 天気データを取得（Open-Meteo API）
+async function fetchWeatherData() {
+    if (!weatherSettings) return;
+
+    try {
+        const { lat, lon } = weatherSettings;
+        // 時間ごとの天気コードも取得
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min&hourly=weather_code&timezone=Asia%2FTokyo&forecast_days=1`;
+
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error('天気データの取得に失敗しました');
+        }
+
+        const data = await response.json();
+
+        if (data.daily && data.hourly) {
+            // 午前（6時〜11時）の天気コードを取得（最も多い天気）
+            const morningCodes = data.hourly.weather_code.slice(6, 12);
+            const morningCode = getMostFrequentCode(morningCodes);
+
+            // 午後（12時〜17時）の天気コードを取得（最も多い天気）
+            const afternoonCodes = data.hourly.weather_code.slice(12, 18);
+            const afternoonCode = getMostFrequentCode(afternoonCodes);
+
+            weatherData = {
+                morningCode: morningCode,
+                afternoonCode: afternoonCode,
+                tempMax: Math.round(data.daily.temperature_2m_max[0]),
+                tempMin: Math.round(data.daily.temperature_2m_min[0])
+            };
+            weatherLastFetched = new Date();
+            updateWeatherDisplay();
+        }
+    } catch (error) {
+        console.error('天気データ取得エラー:', error);
+    }
+}
+
+// 最も頻度の高い天気コードを取得
+function getMostFrequentCode(codes) {
+    const frequency = {};
+    let maxCount = 0;
+    let mostFrequent = codes[0];
+
+    codes.forEach(code => {
+        frequency[code] = (frequency[code] || 0) + 1;
+        if (frequency[code] > maxCount) {
+            maxCount = frequency[code];
+            mostFrequent = code;
+        }
+    });
+
+    return mostFrequent;
+}
+
+// 天気表示を更新
+function updateWeatherDisplay() {
+    const weatherDisplay = document.getElementById('weatherDisplay');
+
+    if (!weatherSettings || !weatherData) {
+        weatherDisplay.innerHTML = '';
+        return;
+    }
+
+    const morningInfo = weatherCodeMap[weatherData.morningCode] || { icon: 'unknown', desc: '不明' };
+    const afternoonInfo = weatherCodeMap[weatherData.afternoonCode] || { icon: 'unknown', desc: '不明' };
+
+    weatherDisplay.innerHTML = `
+        <span class="weather-period">
+            <span class="weather-period-label">午前</span>
+            <span class="weather-icon weather-icon-${morningInfo.icon}" title="午前: ${morningInfo.desc}"></span>
+        </span>
+        <span class="weather-period">
+            <span class="weather-period-label">午後</span>
+            <span class="weather-icon weather-icon-${afternoonInfo.icon}" title="午後: ${afternoonInfo.desc}"></span>
+        </span>
+        <span class="weather-temp">
+            <span class="weather-temp-high">${weatherData.tempMax}°</span>
+            <span class="weather-temp-low">${weatherData.tempMin}°</span>
+        </span>
+    `;
+    weatherDisplay.title = `${weatherSettings.name}: 午前 ${morningInfo.desc} / 午後 ${afternoonInfo.desc} (クリックして設定)`;
+}
