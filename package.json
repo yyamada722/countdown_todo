@@ -1,0 +1,18 @@
+{
+  "name": "countdown-todo",
+  "version": "1.0.0",
+  "description": "Todo application with countdown timers",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "start:port": "PORT=3000 node server.js",
+    "serve": "python3 -m http.server 8080",
+    "serve:python2": "python -m SimpleHTTPServer 8080"
+  },
+  "keywords": ["todo", "countdown", "timer"],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=12.0.0"
+  }
+}
