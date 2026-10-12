@@ -8,7 +8,10 @@ const PORT = process.env.PORT || 8080;
 const HOST = process.env.HOST || '127.0.0.1';
 const ROOT_DIR = __dirname;
 const DB_FILE = path.join(ROOT_DIR, 'data', 'todos.json');
+const BACKUP_DIR = path.join(ROOT_DIR, 'data', 'backups');
+const BACKUP_KEEP_DAYS = 14;
 const MAX_BODY_BYTES = 1024 * 1024;
+const STARTED_AT = new Date().toISOString();
 
 // 配信を許可する静的ファイル（これ以外はリポジトリ内のファイルでも返さない）
 const STATIC_FILES = new Set([
@@ -67,6 +70,31 @@ function initDatabase() {
             lastUpdated: new Date().toISOString()
         };
         fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2));
+    }
+}
+
+// 1日1回、data/backups/todos-YYYYMMDD.json にバックアップを取り、古いものは削除する
+function backupDatabase() {
+    try {
+        if (!fs.existsSync(DB_FILE)) return;
+        // 壊れたファイルはバックアップしない（正常な過去のバックアップを押し出さないため）
+        JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+
+        fs.mkdirSync(BACKUP_DIR, { recursive: true });
+        const now = new Date();
+        const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+        const target = path.join(BACKUP_DIR, `todos-${stamp}.json`);
+        if (!fs.existsSync(target)) {
+            fs.copyFileSync(DB_FILE, target);
+            console.log(`Backup created: ${target}`);
+        }
+
+        const backups = fs.readdirSync(BACKUP_DIR).filter(f => /^todos-\d{8}\.json$/.test(f)).sort();
+        for (const old of backups.slice(0, Math.max(0, backups.length - BACKUP_KEEP_DAYS))) {
+            fs.unlinkSync(path.join(BACKUP_DIR, old));
+        }
+    } catch (error) {
+        console.error('Backup error:', error.message);
     }
 }
 
@@ -168,6 +196,19 @@ async function handleAPI(req, res, pathname) {
     const method = req.method;
 
     // CORSヘッダーは付けない（同一オリジンのこのアプリからだけ使う）
+
+    // GET /api/health - 起動確認用（scripts/launcher.js が起動済みかの判定と停止に使う）
+    if (method === 'GET' && pathname === '/api/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            app: 'countdown-todo',
+            pid: process.pid,
+            host: HOST,
+            port: Number(PORT),
+            startedAt: STARTED_AT
+        }));
+        return;
+    }
 
     // GET /api/todos - 全てのTodoを取得
     if (method === 'GET' && pathname === '/api/todos') {
@@ -843,7 +884,10 @@ const server = http.createServer(async (req, res) => {
     const pathname = parsedUrl.pathname;
     const method = req.method;
     
-    console.log(`${new Date().toISOString()} - ${req.method} ${pathname}`);
+    // 画面が5秒ごとに同期でGETするため、ログには変更系のリクエストだけ残す
+    if (method !== 'GET') {
+        console.log(`${new Date().toISOString()} - ${method} ${pathname}`);
+    }
 
     if (!isAllowedRequest(req)) {
         res.writeHead(403, { 'Content-Type': 'text/plain' });
@@ -897,6 +941,17 @@ const server = http.createServer(async (req, res) => {
 
 // データベース初期化
 initDatabase();
+backupDatabase();
+setInterval(backupDatabase, 60 * 60 * 1000);
+
+server.on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+        console.error(`ERROR: Port ${PORT} is already in use. Stop the other program or start with a different PORT.`);
+    } else {
+        console.error('Server error:', error);
+    }
+    process.exit(1);
+});
 
 // サーバー起動
 server.listen(PORT, HOST, () => {

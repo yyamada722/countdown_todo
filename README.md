@@ -64,18 +64,38 @@ A task management application with countdown timers for each task.
 
 ## サーバーの起動方法
 
-Node.js で付属の `server.js` を起動します（タスクの保存にAPIを使うため、Python や PHP などの静的ファイルサーバーでは動作しません）。
+### Windows（ダブルクリック）
+
+| ファイル | 内容 |
+|---|---|
+| `start.bat` | アプリを開く。サーバーが止まっていればバックグラウンドで起動してからブラウザを開く |
+| `stop.bat` | バックグラウンドのサーバーを停止 |
+| `manage.bat` | 状態表示・再起動・LANモード切替・ログイン時の自動起動ON/OFF・ログ表示・バックアップフォルダを開く |
+
+サーバーはウィンドウを出さずにバックグラウンドで動きます。ログは `logs/server.log` に出力されます。
+
+### コマンドライン（Windows / macOS / Linux 共通）
 
 ```bash
-# Node.jsがインストールされている場合
-node server.js
+npm run up        # バックグラウンドで起動してブラウザを開く（起動済みならブラウザを開くだけ）
+npm run down      # 停止
+npm run restart   # 再起動
+npm run status    # 状態を表示
+npm run logs      # ログの末尾を表示
 
-# または npm を使用
-npm start
-
-# ポートを指定する場合（例：3000番ポート）
-npm run start:port
+# ログイン時に自動起動（Windowsのみ）
+node scripts/launcher.js autostart on
+node scripts/launcher.js autostart off
 ```
+
+ターミナル上で（フォアグラウンドで）動かす場合は `npm start`（ポート3000なら `npm run start:port`）を使います。
+
+> タスクの保存にAPIを使うため、Python や PHP などの静的ファイルサーバーでは動作しません。
+
+### データのバックアップ
+
+サーバーは1日1回、`data/backups/todos-YYYYMMDD.json` にデータのバックアップを取ります（直近14日分を保持）。
+データが壊れた場合は、サーバーを止めてからバックアップを `data/todos.json` にコピーしてください。
 
 ## アクセス方法
 
@@ -83,16 +103,13 @@ npm run start:port
 
 - **ローカルアクセス**: `http://localhost:8080`
 
-スマホなど **LAN内・VPN経由の他の端末から使う場合** は、ネットワーク公開モードで起動します：
-
-```bash
-npm run start:lan
-```
+スマホなど **LAN内・VPN経由の他の端末から使う場合** は、LANモードで起動します（`manage.bat` の [4]、または `npm run up:lan`）。
+起動時に、他の端末からアクセスするためのURLが表示されます：
 
 - **LAN内アクセス**: `http://<サーバーのIPアドレス>:8080`
 - **VPN経由アクセス**: `http://<VPNで割り当てられたIPアドレス>:8080`
 
-> ⚠️ このモードには認証がないため、同じネットワーク上の誰でもタスクを閲覧・編集できます。信頼できるネットワークでのみ使用してください。
+> ⚠️ LANモードには認証がないため、同じネットワーク上の誰でもタスクを閲覧・編集できます。信頼できるネットワークでのみ使用してください。
 
 ## API エンドポイント
 
@@ -159,6 +176,7 @@ Tailscaleは設定が簡単で安全なメッシュVPNサービスです。
    - 自動的にサーバーとVPN接続が確立されます
 
 4. **アクセス方法**
+   - サーバーを LANモード で起動します（`manage.bat` の [4]、または `npm run up:lan`）
    ```
    http://<TailscaleのIPアドレス>:8080
    ```
@@ -212,8 +230,16 @@ countdown_todo/
 ├── package.json        # npm設定
 ├── manifest.json       # PWAマニフェスト
 ├── service-worker.js   # Service Worker
+├── start.bat           # Windows: アプリを開く（必要ならサーバーを起動）
+├── stop.bat            # Windows: サーバーを停止
+├── manage.bat          # Windows: 管理メニュー
+├── scripts/
+│   └── launcher.js     # バックグラウンド起動・停止・自動起動の設定
 ├── data/
-│   └── todos.json      # データベース（自動生成）
+│   ├── todos.json      # データベース（自動生成）
+│   └── backups/        # 日次バックアップ（自動生成）
+├── logs/
+│   └── server.log      # バックグラウンド起動時のログ（自動生成）
 ├── fonts/
 │   └── Nosutaru-dotMPlusH-10-Regular.ttf
 ├── icon-192.png        # PWAアイコン
@@ -224,7 +250,8 @@ countdown_todo/
 
 ### Windows
 1. ZIPファイルをダウンロードして展開
-2. `install_and_run.bat` を実行
+2. `start.bat` をダブルクリック
+3. PCを起動したら自動でサーバーが立ち上がるようにしたい場合は、`manage.bat` を開いて [5] を選ぶ
 
 ### macOS/Linux
 ```bash
@@ -232,19 +259,19 @@ countdown_todo/
 git clone https://github.com/yyamada722/countdown_todo.git
 cd countdown_todo
 
-# サーバーを起動
-node server.js
+# サーバーを起動（バックグラウンド）
+npm run up
 ```
 
 ## 必要環境 / Requirements
 
-- Node.js 12.0.0 以上（推奨）
-- または Python 3.x
+- Node.js 12.0.0 以上
 - モダンなWebブラウザ（Chrome, Firefox, Safari, Edge）
 
 ## セキュリティ上の注意 / Security Notes
 
 - このアプリケーションは開発・個人利用を想定しています
+- 既定ではこのPCからのみアクセスできます。LANモードには認証がないため、信頼できるネットワークでのみ使用してください
 - インターネットに直接公開する場合は、適切なセキュリティ対策を実施してください
 - VPN経由でのアクセスを推奨します
 

@@ -7,6 +7,12 @@
     "start": "node server.js",
     "start:port": "node -e \"process.env.PORT='3000';require('./server.js')\"",
     "start:lan": "node -e \"process.env.HOST='0.0.0.0';require('./server.js')\"",
+    "up": "node scripts/launcher.js start --open",
+    "up:lan": "node scripts/launcher.js start --open --lan",
+    "down": "node scripts/launcher.js stop",
+    "restart": "node scripts/launcher.js restart",
+    "status": "node scripts/launcher.js status",
+    "logs": "node scripts/launcher.js logs",
     "test": "jest"
   },
   "keywords": [
