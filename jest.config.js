@@ -1,3 +1,6 @@
+// テスト内の日時計算はUTC前提で書かれているため、実行環境のタイムゾーンに依存しないよう固定する
+process.env.TZ = 'UTC';
+
 module.exports = {
   testEnvironment: 'jsdom',
   testMatch: ['**/__tests__/**/*.test.js', '**/?(*.)+(spec|test).js'],

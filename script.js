@@ -1411,7 +1411,7 @@ function renderTodos() {
             <!-- カード上部 -->
             <div class="todo-header">
                 <div class="todo-header-left">
-                    <h3 class="todo-title">${todo.title}</h3>
+                    <h3 class="todo-title">${escapeHtml(todo.title)}</h3>
                     <span class="todo-status ${timeInfo.statusClass}">${timeInfo.status}</span>
                 </div>
                 <div class="todo-deadline">
@@ -1491,7 +1491,7 @@ function renderTodos() {
                 <!-- カード上部 -->
                 <div class="todo-header">
                     <div class="todo-header-left">
-                        <h3 class="todo-title">${todo.title}</h3>
+                        <h3 class="todo-title">${escapeHtml(todo.title)}</h3>
                         ${todo.repeat ? `<span class="todo-repeat-tag">${getRepeatText(todo.repeat)}</span>` : ''}
                         ${todo.notify ? '<span class="todo-notify-tag">通知</span>' : ''}
                         ${todo.memo ? '<span class="todo-memo-tag">MEMO</span>' : ''}
@@ -1514,7 +1514,7 @@ function renderTodos() {
                 <!-- カード上部 -->
                 <div class="todo-header">
                     <div class="todo-header-left">
-                        <h3 class="todo-title">${todo.title}</h3>
+                        <h3 class="todo-title">${escapeHtml(todo.title)}</h3>
                         <span class="todo-status ${timeInfo.statusClass}">${timeInfo.status}</span>
                         ${todo.repeat ? `<span class="todo-repeat-tag">${getRepeatText(todo.repeat)}</span>` : ''}
                         ${todo.notify ? '<span class="todo-notify-tag">通知</span>' : ''}
@@ -2583,7 +2583,7 @@ function showPreNotification(todo, remainingMinutes) {
             <button class="notification-close" onclick="dismissNotification('${notificationId}')">&times;</button>
         </div>
         <div class="notification-body">
-            <div class="notification-task">${todo.title}</div>
+            <div class="notification-task">${escapeHtml(todo.title)}</div>
             <div class="notification-time">あと${remainingMinutes}分</div>
         </div>
         <div class="notification-actions">
@@ -3340,11 +3340,14 @@ function renderWeeklyView() {
     }
 }
 
-// HTMLエスケープ関数
+// HTMLエスケープ関数（属性値 value="..." の中でも安全なように引用符もエスケープする）
 function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    return String(text ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }
 
 // スケジュールビューをレンダリング

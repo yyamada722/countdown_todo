@@ -3,7 +3,7 @@
  * Tests for the modified server endpoints, especially the DELETE operation and parseFloat usage
  */
 
-const { describe, test, expect, beforeEach, jest } = require('@jest/globals');
+const { describe, test, expect, beforeEach } = require('@jest/globals');
 
 describe('Todo ID Parsing', () => {
   test('should parse integer ID correctly', () => {

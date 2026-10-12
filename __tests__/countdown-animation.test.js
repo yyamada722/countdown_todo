@@ -3,7 +3,7 @@
  * Tests for the improved countdown display with requestAnimationFrame and completion animations
  */
 
-const { describe, test, expect, beforeEach, afterEach, jest } = require('@jest/globals');
+const { describe, test, expect, beforeEach, afterEach } = require('@jest/globals');
 
 describe('Animation Frame Management', () => {
   let animationFrameId = null;

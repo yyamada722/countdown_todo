@@ -64,7 +64,7 @@ A task management application with countdown timers for each task.
 
 ## サーバーの起動方法
 
-### 方法1: Node.js を使用（推奨）
+Node.js で付属の `server.js` を起動します（タスクの保存にAPIを使うため、Python や PHP などの静的ファイルサーバーでは動作しません）。
 
 ```bash
 # Node.jsがインストールされている場合
@@ -74,39 +74,25 @@ node server.js
 npm start
 
 # ポートを指定する場合（例：3000番ポート）
-PORT=3000 node server.js
-```
-
-### 方法2: Python を使用
-
-```bash
-# Python 3 の場合
-python3 -m http.server 8080
-
-# Python 2 の場合
-python -m SimpleHTTPServer 8080
-```
-
-### 方法3: その他の簡易サーバー
-
-```bash
-# PHP の場合
-php -S 0.0.0.0:8080
-
-# Ruby の場合
-ruby -run -e httpd . -p 8080
-
-# http-server (npm) の場合
-npx http-server -p 8080
+npm run start:port
 ```
 
 ## アクセス方法
 
-サーバー起動後、以下のURLでアクセスできます：
+既定では **このPCからのみ** アクセスできます：
 
-1. **ローカルアクセス**: `http://localhost:8080`
-2. **LAN内アクセス**: `http://<サーバーのIPアドレス>:8080`
-3. **VPN経由アクセス**: `http://<VPNで割り当てられたIPアドレス>:8080`
+- **ローカルアクセス**: `http://localhost:8080`
+
+スマホなど **LAN内・VPN経由の他の端末から使う場合** は、ネットワーク公開モードで起動します：
+
+```bash
+npm run start:lan
+```
+
+- **LAN内アクセス**: `http://<サーバーのIPアドレス>:8080`
+- **VPN経由アクセス**: `http://<VPNで割り当てられたIPアドレス>:8080`
+
+> ⚠️ このモードには認証がないため、同じネットワーク上の誰でもタスクを閲覧・編集できます。信頼できるネットワークでのみ使用してください。
 
 ## API エンドポイント
 

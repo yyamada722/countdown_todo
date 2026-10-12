@@ -4,8 +4,26 @@ const path = require('path');
 const url = require('url');
 
 const PORT = process.env.PORT || 8080;
-const HOST = '0.0.0.0';
-const DB_FILE = './data/todos.json';
+// 既定はこのPCからのみアクセス可。LAN内の他端末から使う場合は HOST=0.0.0.0 で起動する
+const HOST = process.env.HOST || '127.0.0.1';
+const ROOT_DIR = __dirname;
+const DB_FILE = path.join(ROOT_DIR, 'data', 'todos.json');
+const MAX_BODY_BYTES = 1024 * 1024;
+
+// 配信を許可する静的ファイル（これ以外はリポジトリ内のファイルでも返さない）
+const STATIC_FILES = new Set([
+    '/index.html',
+    '/script.js',
+    '/style.css',
+    '/service-worker.js',
+    '/manifest.json',
+    '/icon-192.png',
+    '/icon-512.png',
+    '/fonts/Nosutaru-dotMPlusH-10-Regular.ttf'
+]);
+
+class BadRequestError extends Error {}
+class DatabaseError extends Error {}
 
 // MIMEタイプの定義
 const mimeTypes = {
@@ -53,33 +71,40 @@ function initDatabase() {
 }
 
 // JSONデータベースの読み込み
+// 読めない・壊れている場合は空データで続行せず例外にする（空データで上書き保存して全消去するのを防ぐ）
 function readDatabase() {
+    let parsedData;
     try {
-        const data = fs.readFileSync(DB_FILE, 'utf8');
-        const parsedData = JSON.parse(data);
-        
-        // presetsフィールドがない場合は追加
-        if (!parsedData.presets) {
-            parsedData.presets = [];
-        }
-        
-        // schedulesフィールドがない場合は追加
-        if (!parsedData.schedules) {
-            parsedData.schedules = [];
-        }
-        
-        return parsedData;
+        parsedData = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
     } catch (error) {
         console.error('Database read error:', error);
-        return { todos: [], presets: [], schedules: [], lastUpdated: new Date().toISOString() };
+        throw new DatabaseError(`Cannot read database: ${error.message}`);
     }
+    if (!parsedData || !Array.isArray(parsedData.todos)) {
+        throw new DatabaseError('Database file has an unexpected format');
+    }
+
+    // presetsフィールドがない場合は追加
+    if (!parsedData.presets) {
+        parsedData.presets = [];
+    }
+
+    // schedulesフィールドがない場合は追加
+    if (!parsedData.schedules) {
+        parsedData.schedules = [];
+    }
+
+    return parsedData;
 }
 
 // JSONデータベースへの書き込み
+// 一時ファイルに書いてから置き換えるので、書き込み途中で落ちても元のファイルは壊れない
 function writeDatabase(data) {
+    const tmpFile = `${DB_FILE}.tmp`;
     try {
         data.lastUpdated = new Date().toISOString();
-        fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+        fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2));
+        fs.renameSync(tmpFile, DB_FILE);
         return true;
     } catch (error) {
         console.error('Database write error:', error);
@@ -90,36 +115,60 @@ function writeDatabase(data) {
 // リクエストボディを解析
 function parseRequestBody(req) {
     return new Promise((resolve, reject) => {
-        let body = '';
+        const chunks = [];
+        let size = 0;
         req.on('data', chunk => {
-            body += chunk.toString();
+            size += chunk.length;
+            if (size > MAX_BODY_BYTES) {
+                reject(new BadRequestError('Request body too large'));
+                req.destroy();
+                return;
+            }
+            chunks.push(chunk);
         });
         req.on('end', () => {
             try {
-                resolve(JSON.parse(body));
+                resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
             } catch (error) {
-                reject(error);
+                reject(new BadRequestError('Invalid JSON'));
             }
         });
+        req.on('error', reject);
     });
+}
+
+// 別サイトからのリクエスト（CSRF）とDNSリバインディングを拒否する
+function isAllowedRequest(req) {
+    const host = req.headers.host || '';
+    const hostname = host.replace(/:\d+$/, '').replace(/^\[|\]$/g, '');
+
+    // ローカル専用モードでは、Hostヘッダーがローカルを指していることを確認
+    if (HOST === '127.0.0.1' || HOST === 'localhost') {
+        if (!['localhost', '127.0.0.1', '::1'].includes(hostname)) {
+            return false;
+        }
+    }
+
+    // ブラウザが付けるOriginが自分自身でなければ拒否（同一オリジンのGETではOriginが付かないこともある）
+    const origin = req.headers.origin;
+    if (origin) {
+        try {
+            if (new URL(origin).host !== host) {
+                return false;
+            }
+        } catch (e) {
+            return false;
+        }
+    }
+    return true;
 }
 
 // APIエンドポイントの処理
 async function handleAPI(req, res, pathname) {
     const method = req.method;
-    
-    // CORS設定
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    
-    // OPTIONSリクエストの処理
-    if (method === 'OPTIONS') {
-        res.writeHead(200);
-        res.end();
-        return;
-    }
-    
+
+    // CORSヘッダーは付けない（同一オリジンのこのアプリからだけ使う）
+
     // GET /api/todos - 全てのTodoを取得
     if (method === 'GET' && pathname === '/api/todos') {
         const data = readDatabase();
@@ -154,6 +203,7 @@ async function handleAPI(req, res, pathname) {
                 res.end(JSON.stringify({ error: 'Failed to save todo' }));
             }
         } catch (error) {
+            if (error instanceof DatabaseError) throw error;
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Invalid request body' }));
         }
@@ -183,6 +233,7 @@ async function handleAPI(req, res, pathname) {
                 res.end(JSON.stringify({ error: 'Todo not found' }));
             }
         } catch (error) {
+            if (error instanceof DatabaseError) throw error;
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Invalid request body' }));
         }
@@ -231,6 +282,7 @@ async function handleAPI(req, res, pathname) {
                 res.end(JSON.stringify({ error: 'Failed to sync todos' }));
             }
         } catch (error) {
+            if (error instanceof DatabaseError) throw error;
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Invalid request body' }));
         }
@@ -271,7 +323,8 @@ async function handleAPI(req, res, pathname) {
             
             // レベルアップ判定
             const newLevel = calculateLevel(data.userStats.exp);
-            if (newLevel > data.userStats.level) {
+            const levelUp = newLevel > data.userStats.level;
+            if (levelUp) {
                 data.userStats.level = newLevel;
                 data.userStats.rank = getRank(newLevel);
             }
@@ -287,13 +340,14 @@ async function handleAPI(req, res, pathname) {
                 res.end(JSON.stringify({
                     earnedExp,
                     userStats: data.userStats,
-                    levelUp: newLevel > data.userStats.level
+                    levelUp
                 }));
             } else {
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: 'Failed to update stats' }));
             }
         } catch (error) {
+            if (error instanceof DatabaseError) throw error;
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Invalid request body' }));
         }
@@ -333,6 +387,7 @@ async function handleAPI(req, res, pathname) {
                 res.end(JSON.stringify({ error: 'Failed to create preset' }));
             }
         } catch (error) {
+            if (error instanceof DatabaseError) throw error;
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Invalid request body' }));
         }
@@ -367,6 +422,7 @@ async function handleAPI(req, res, pathname) {
                 res.end(JSON.stringify({ error: 'Preset not found' }));
             }
         } catch (error) {
+            if (error instanceof DatabaseError) throw error;
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Invalid request body' }));
         }
@@ -462,6 +518,7 @@ async function handleAPI(req, res, pathname) {
                 res.end(JSON.stringify({ error: 'Failed to apply preset' }));
             }
         } catch (error) {
+            if (error instanceof DatabaseError) throw error;
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Failed to apply preset' }));
         }
@@ -502,6 +559,7 @@ async function handleAPI(req, res, pathname) {
                 res.end(JSON.stringify({ error: 'Failed to save schedule' }));
             }
         } catch (error) {
+            if (error instanceof DatabaseError) throw error;
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Invalid request' }));
         }
@@ -537,6 +595,7 @@ async function handleAPI(req, res, pathname) {
                 res.end(JSON.stringify({ error: 'Schedule not found' }));
             }
         } catch (error) {
+            if (error instanceof DatabaseError) throw error;
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Invalid request' }));
         }
@@ -630,6 +689,7 @@ async function handleAPI(req, res, pathname) {
                 res.end(JSON.stringify({ error: 'Failed to create tasks' }));
             }
         } catch (error) {
+            if (error instanceof DatabaseError) throw error;
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Invalid request' }));
         }
@@ -784,22 +844,41 @@ const server = http.createServer(async (req, res) => {
     const method = req.method;
     
     console.log(`${new Date().toISOString()} - ${req.method} ${pathname}`);
-    
-    // APIリクエストの処理
-    if (pathname.startsWith('/api/')) {
-        await handleAPI(req, res, pathname);
+
+    if (!isAllowedRequest(req)) {
+        res.writeHead(403, { 'Content-Type': 'text/plain' });
+        res.end('403 Forbidden');
         return;
     }
-    
-    // 静的ファイルの処理
-    let filePath = '.' + pathname;
-    if (filePath === './') {
-        filePath = './index.html';
+
+    // APIリクエストの処理
+    if (pathname.startsWith('/api/')) {
+        try {
+            await handleAPI(req, res, pathname);
+        } catch (error) {
+            console.error('API error:', error);
+            if (!res.headersSent) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    error: error instanceof DatabaseError ? 'Database is unreadable; nothing was saved' : 'Internal server error'
+                }));
+            }
+        }
+        return;
     }
-    
-    const extname = String(path.extname(filePath)).toLowerCase();
+
+    // 静的ファイルの処理（許可リストにあるものだけ返す）
+    const requestPath = pathname === '/' ? '/index.html' : pathname;
+    if (!STATIC_FILES.has(requestPath)) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('404 Not Found', 'utf-8');
+        return;
+    }
+
+    const filePath = path.join(ROOT_DIR, requestPath);
+    const extname = path.extname(filePath).toLowerCase();
     const contentType = mimeTypes[extname] || 'application/octet-stream';
-    
+
     fs.readFile(filePath, (error, content) => {
         if (error) {
             if (error.code === 'ENOENT') {
@@ -810,11 +889,8 @@ const server = http.createServer(async (req, res) => {
                 res.end(`Server Error: ${error.code}`, 'utf-8');
             }
         } else {
-            res.writeHead(200, { 
-                'Content-Type': contentType,
-                'Access-Control-Allow-Origin': '*'
-            });
-            res.end(content, 'utf-8');
+            res.writeHead(200, { 'Content-Type': contentType });
+            res.end(content);
         }
     });
 });
@@ -833,7 +909,9 @@ Local access:
   http://localhost:${PORT}
 
 Network access:
-  http://${getNetworkIP()}:${PORT}
+  ${HOST === '127.0.0.1' || HOST === 'localhost'
+      ? 'disabled (start with HOST=0.0.0.0 to allow other devices on your LAN)'
+      : `http://${getNetworkIP()}:${PORT}`}
 
 API Endpoints:
   GET    /api/todos       - Get all todos

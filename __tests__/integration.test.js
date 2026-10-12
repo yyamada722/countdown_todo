@@ -3,7 +3,7 @@
  * Tests for interactions between different components and end-to-end workflows
  */
 
-const { describe, test, expect, beforeEach, jest } = require('@jest/globals');
+const { describe, test, expect, beforeEach } = require('@jest/globals');
 
 describe('Weather and Clock Integration', () => {
   beforeEach(() => {

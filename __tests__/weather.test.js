@@ -3,7 +3,7 @@
  * Tests for the new weather feature including settings, API integration, and display
  */
 
-const { describe, test, expect, beforeEach, jest } = require('@jest/globals');
+const { describe, test, expect, beforeEach } = require('@jest/globals');
 
 // Mock DOM elements
 function setupWeatherDOM() {
